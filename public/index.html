@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>LifeOS</title>
+<meta name="description" content="Your private readiness dashboard.">
+<meta name="theme-color" content="#F2F3EF">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="LifeOS">
+<meta name="robots" content="noindex,nofollow">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;1,700;1,800;1,900&family=Barlow:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<div id="auth" class="authwrap" hidden></div>
+<div id="shell" hidden>
+  <div class="app" id="app">
+    <header class="top" id="top"></header>
+    <main id="view" class="stack"></main>
+  </div>
+  <div class="tabs"><nav id="tabs" aria-label="Sections"></nav></div>
+</div>
+<input type="file" id="fileShots" accept="image/*" multiple hidden>
+<input type="file" id="fileApple" accept=".json,.xml,application/json,text/xml" hidden>
+<script src="/app.js" type="module"></script>
+</body>
+</html>

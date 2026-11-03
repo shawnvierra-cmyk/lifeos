@@ -1,0 +1,22 @@
+{
+  "name": "lifeos",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "LifeOS: a private readiness dashboard, trip journal, calendar and notes app.",
+  "scripts": {
+    "check": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.4.0",
+    "@netlify/blobs": "^11.1.7",
+    "@netlify/functions": "^6.0.3",
+    "node-ical": "^0.27.3",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "@types/node": "^24.0.0",
+    "esbuild": "^0.28.2"
+  }
+}
