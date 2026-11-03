@@ -216,7 +216,7 @@ const sampleBanner = () => "";
 function render() {
   if (!S.loaded) return;
   renderTabs(); store.set("lifeos.tab", S.tab);
-  if (S.tab === "more") return (S.moreView === "cal" ? vCal : S.moreView === "notes" ? vNotes : vMore)();
+  if (S.tab === "more") return (S.moreView === "cal" ? vCal : S.moreView === "notes" ? vNotes : S.moreView === "profile" ? vProfile : vMore)();
   ({ today: vToday, health: vHealth, training: vTraining, trips: vTrips })[S.tab]();
 }
 
@@ -427,10 +427,96 @@ function dictate() {
 function vMore() {
   header("Everything else", "More");
   const up = calEvents().filter((e) => e.e > new Date()).slice(0, 2);
+  const st = S.settings;
   $("#view").innerHTML = `
+    <button class="card morerow" data-more="profile">${avatarHtml(48)}<span><b>${esc(st.name || "Your profile")}</b><span class="small muted">${esc(st.email)} · ${(st.socials || []).length} social account${(st.socials || []).length === 1 ? "" : "s"}</span></span></button>
     <button class="card morerow" data-more="cal"><span class="ic">${icon(I.cal)}</span><span><b>Calendar</b><span class="small muted">${S.cal.connected ? (up[0] ? `Next: ${esc(up[0].title)}` : "Nothing coming up") : "Not connected"}</span></span></button>
     <button class="card morerow" data-more="notes"><span class="ic">${icon(I.notes)}</span><span><b>Notes</b><span class="small muted">${S.notes.length} saved · dictate or type</span></span></button>
     <button class="card morerow" data-act="settings"><span class="ic">${icon(I.gear)}</span><span><b>Connections & settings</b><span class="small muted">Calendar, Oura, Apple Health, appearance</span></span></button>`;
+}
+
+/* ---------- Profile ---------- */
+const PLAT = { instagram: "Instagram", facebook: "Facebook", threads: "Threads", tiktok: "TikTok", youtube: "YouTube", linkedin: "LinkedIn", x: "X" };
+function avatarHtml(size) {
+  const st = S.settings || {}; const initial = (st.name || st.email || "?").trim()[0]?.toUpperCase() || "?";
+  return st.avatar ? `<img class="avatar" src="${mediaUrl(st.avatar)}" alt="" style="width:${size}px;height:${size}px">` : `<span class="avatar ph" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.42)}px">${esc(initial)}</span>`;
+}
+const fmtK = (n) => (n == null ? "–" : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e4 ? `${Math.round(n / 1e3)}K` : Math.round(n).toLocaleString());
+function vProfile() {
+  const st = S.settings;
+  header("Account", "Profile", `<button class="iconbtn" data-more="none" aria-label="Back">${icon(I.back, 20)}</button>`);
+  const since = st.createdAt ? new Date(st.createdAt).toLocaleDateString(undefined, { month: "long", year: "numeric" }) : "";
+  const socials = st.socials || [];
+  const total = socials.reduce((a, s) => a + (s.followers || 0), 0);
+  const conn = [
+    ["Google Calendar", st.calendar?.connected, "Cards build from it"], ["Oura", st.oura?.connected, "Daily sleep and readiness"],
+    ["Apple Health", !!latestFor(S.days, "apple"), "Steps, sleep, HRV via Shortcut"], ["Screenshot reading", st.ai, "Scale, Eight Sleep, Insights"],
+  ];
+  $("#view").innerHTML = `
+    <section class="card prof">
+      <button class="avbtn" data-act="avatar" aria-label="Change photo">${avatarHtml(84)}<span class="avedit">${icon(I.img, 14)}</span></button>
+      <div style="min-width:0;flex:1"><input id="profName" class="namein" value="${esc(st.name || "")}" placeholder="Your name" maxlength="60"><div class="small muted">${esc(st.email)}${since ? ` · since ${esc(since)}` : ""}</div></div>
+    </section>
+    <div class="sec-h"><h2>Social</h2>${socials.length ? `<span class="small muted">${fmtK(total)} followers</span>` : ""}</div>
+    ${socials.length ? `<div class="socgrid">${socials.map((s, i) => `<button class="card soc" data-soc="${i}"><span class="pl pl-${s.platform}">${PLAT[s.platform]}</span><div class="num">${fmtK(s.followers)}</div><div class="small muted">@${esc(s.handle)}</div><div class="small muted">${s.statsAt ? `followers · ${esc(new Date(s.statsAt).toLocaleDateString(undefined, { month: "short", day: "numeric" }))}` : "no numbers yet"}</div></button>`).join("")}</div>` : `<section class="card"><p style="margin:0">Add your accounts, then drop an Insights screenshot and the follower, reach and view numbers are read into your profile with the date.</p></section>`}
+    <div class="actions"><button class="btn volt" data-act="addsocial">${icon(I.plus, 18)} Add account</button>${socials.length ? `<button class="btn ghost" data-act="socialshot">${icon(I.img, 18)} Update from screenshot</button>` : ""}</div>
+    <div class="sec-h"><h2>Connections</h2><button class="link" data-act="settings">Manage</button></div>
+    <section class="card">${conn.map(([n, on, d]) => `<div class="conn"><div><h4>${n}</h4><div class="small muted">${d}</div></div><span class="chip ${on ? "ok" : "wait"}">${on ? "On" : "Off"}</span></div>`).join("")}</section>
+    <div class="sec-h"><h2>Appearance</h2></div>
+    <div class="seg" role="group" aria-label="Appearance">${["system", "light", "dark"].map((v) => `<button data-theme-set="${v}" aria-pressed="${(store.get("lifeos.theme") || "system") === v}">${v[0].toUpperCase() + v.slice(1)}</button>`).join("")}</div>
+    <div class="sec-h"><h2>Account</h2></div>
+    <section class="card">
+      <div class="conn"><div><h4>Sign out</h4><div class="small muted">Your data stays. Sign back in any time.</div></div><button class="btn ghost" data-act="signout" style="height:36px">Sign out</button></div>
+      <div class="conn"><div><h4>Delete my account</h4><div class="small muted">Removes everything: health history, cards, workouts, photos, notes. There's no undo.</div></div><button class="btn ghost" data-act="deleteaccount" style="height:36px;color:var(--bad)">Delete</button></div>
+    </section>`;
+  const nameBox = $("#profName"); let t;
+  nameBox.addEventListener("input", () => { clearTimeout(t); t = setTimeout(async () => { try { const r = await api("settings/profile", { method: "POST", body: { name: nameBox.value } }); S.settings = r.settings; } catch (e) { toast(esc(e.message)); } }, 500); });
+  $("#view").querySelectorAll("[data-theme-set]").forEach((b) => (b.onclick = () => { store.set("lifeos.theme", b.dataset.themeSet); applyTheme(); $("#view").querySelectorAll("[data-theme-set]").forEach((x) => x.setAttribute("aria-pressed", x === b)); }));
+}
+function socialSheet(index) {
+  const socials = S.settings.socials || []; const s = index != null ? socials[index] : null;
+  sheet(`<h2>${s ? PLAT[s.platform] : "Add account"}</h2>
+    ${s ? `<div class="small muted">@${esc(s.handle)}${s.url ? ` · <a class="link" href="${esc(s.url)}" target="_blank" rel="noopener">Open</a>` : ""}</div>
+    <div class="grid2" style="margin-top:14px">${[["followers", "Followers"], ["following", "Following"], ["posts", "Posts"], ["reach", "Reach"], ["views", "Views"], ["engagement", "Engagement %"]].map(([k, l]) => `<div><div class="label">${l}</div><div class="num" style="font-size:30px">${s[k] == null ? "–" : fmtK(s[k])}</div></div>`).join("")}</div>
+    <div class="small muted" style="margin-top:10px">${s.statsAt ? `Read from a screenshot on ${esc(new Date(s.statsAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }))}.` : "No numbers yet. Drop an Insights screenshot to fill these in."}</div>
+    ${s.history?.length > 1 ? `<div class="spark" style="margin-top:12px"><div class="label" style="margin-bottom:4px">Followers</div>${spark(s.history.map((h) => h.followers))}</div>` : ""}
+    <div class="actions"><button class="btn volt" data-act="socialshot">${icon(I.img, 18)} Update from screenshot</button><button class="btn ghost" id="socDel">Remove</button></div>` : `
+    <div class="field"><label class="label" for="socPlat">Platform</label><select id="socPlat">${Object.entries(PLAT).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}</select></div>
+    <div class="field"><label class="label" for="socHandle">Handle</label><input id="socHandle" placeholder="without the @" autocapitalize="off" autocorrect="off"></div>
+    <div class="err" id="socErr"></div>
+    <div class="actions"><button class="btn volt wide" id="socSave">Add</button></div>`}`, (el) => {
+    el.querySelector("#socSave")?.addEventListener("click", async () => {
+      const handle = el.querySelector("#socHandle").value.trim().replace(/^@/, ""); if (!handle) { el.querySelector("#socErr").textContent = "Enter the handle."; return; }
+      try { const r = await api("settings/socials", { method: "POST", body: { socials: [...socials, { platform: el.querySelector("#socPlat").value, handle }] } }); S.settings = r.settings; closeSheet(); render(); toast("Account added. Drop an Insights screenshot to fill in the numbers."); }
+      catch (e) { el.querySelector("#socErr").textContent = e.message; }
+    });
+    el.querySelector("#socDel")?.addEventListener("click", async (e) => {
+      const b = e.currentTarget; if (!b.dataset.armed) { b.dataset.armed = "1"; b.textContent = "Tap again to remove"; return; }
+      try { const r = await api("settings/socials", { method: "POST", body: { socials: socials.filter((_, i) => i !== index) } }); S.settings = r.settings; closeSheet(); render(); } catch (x) { toast(esc(x.message)); }
+    });
+  });
+}
+async function handleSocialShots(files) {
+  for (const [i, file] of [...files].entries()) {
+    toast(spinner(`Reading screenshot${files.length > 1 ? ` ${i + 1} of ${files.length}` : ""}…`));
+    try {
+      const blob = await shrink(file);
+      const r = await api("social/screenshot", { method: "POST", body: blob, raw: true, headers: { "content-type": blob.type || "image/jpeg" } });
+      if (r.logged) { S.settings = r.settings; closeSheet(); render(); toast(`${PLAT[r.platform]} @${esc(r.handle)}: ${esc(r.fields.join(", "))}${r.period ? ` (${esc(r.period)})` : ""}.`); }
+      else toast(esc(r.reason));
+    } catch (e) { toast(esc(e.message)); }
+  }
+}
+function deleteAccountSheet() {
+  sheet(`<h2>Delete my account</h2><p>This removes your whole account: health history, cards, workouts, journal photos and notes. It can't be undone.</p>
+    <div class="field"><label class="label" for="delEmail">Type your email to confirm</label><input id="delEmail" type="email" autocapitalize="off"></div>
+    <div class="err" id="delErr"></div>
+    <div class="actions"><button class="btn wide" id="delGo" style="background:var(--bad);color:#fff">Delete everything</button><button class="btn ghost wide" data-close>Keep my account</button></div>`, (el) => {
+    el.querySelector("#delGo").onclick = async () => {
+      try { await api("account", { method: "DELETE", body: { confirm: el.querySelector("#delEmail").value } }); store.del("lifeos.hasAccount"); location.reload(); }
+      catch (e) { el.querySelector("#delErr").textContent = e.message; }
+    };
+  });
 }
 
 /* ---------- Training ---------- */
@@ -989,6 +1075,7 @@ document.addEventListener("click", async (e) => {
   const seg = e.target.closest("[data-seg]"); if (seg) { S.tripSeg = seg.dataset.seg; render(); return; }
   const tr = e.target.closest("[data-trip]"); if (tr) { tripDetail(tr.dataset.trip); return; }
   const ss = e.target.closest("[data-session]"); if (ss) { sessionSheet(ss.dataset.session); return; }
+  const so = e.target.closest("[data-soc]"); if (so) { socialSheet(+so.dataset.soc); return; }
   const rs = e.target.closest("[data-routine-start]");
   if (rs) {
     const r = S.routines.find((x) => x.id === rs.dataset.routineStart); if (!r) return;
@@ -1015,6 +1102,11 @@ document.addEventListener("click", async (e) => {
   else if (act === "importcards") $("#fileCards").click();
   else if (act === "synccards") syncCards();
   else if (act === "talk") talkSheet();
+  else if (act === "avatar") $("#fileAvatar").click();
+  else if (act === "addsocial") socialSheet(null);
+  else if (act === "socialshot") $("#fileSocial").click();
+  else if (act === "signout") { await api("auth/logout", { method: "POST", body: {} }).catch(() => {}); location.reload(); }
+  else if (act === "deleteaccount") deleteAccountSheet();
   else if (act === "newworkout") reviewSheet({ title: "Workout", date: todayStr(), status: "done", source: "manual", exercises: [{ name: "", targetReps: "", sets: [{ weight: null, reps: null, done: true }, { weight: null, reps: null, done: true }, { weight: null, reps: null, done: true }] }] }, "Fill in what you did and save it.");
   else if (act === "ourasync") {
     a.disabled = true; toast(spinner("Syncing Oura…"));
@@ -1030,6 +1122,13 @@ document.addEventListener("click", async (e) => {
   else if (act === "dictate") dictate();
 });
 $("#fileShots").onchange = (e) => { const f = [...e.target.files]; e.target.value = ""; handleShots(f); };
+$("#fileSocial").onchange = (e) => { const f = [...e.target.files]; e.target.value = ""; handleSocialShots(f); };
+$("#fileAvatar").onchange = async (e) => {
+  const f0 = e.target.files[0]; e.target.value = ""; if (!f0) return;
+  toast(spinner("Uploading photo…"));
+  try { const f = await photoForUpload(f0); const u = await upload(f); const r = await api("settings/profile", { method: "POST", body: { avatar: u.id } }); S.settings = r.settings; render(); toast("Photo updated."); }
+  catch (x) { toast(esc(x.message)); }
+};
 $("#fileCards").onchange = async (e) => {
   const f = e.target.files[0]; e.target.value = ""; if (!f) return;
   let cards;

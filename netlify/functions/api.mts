@@ -14,6 +14,7 @@ import { downloadCommons, searchCommons } from "../lib/photos.mts";
 import { syncOura } from "../lib/health.mts";
 import { syncCards, fillPhotos, autoPhoto, tripKey, type Trip } from "../lib/cards.mts";
 import { assist, listDocs, newWorkout, routineKey, workoutKey, cleanExercises, type Workout, type Routine } from "../lib/training.mts";
+import { cleanSocials, readSocialShot, PLATFORMS } from "../lib/social.mts";
 
 type Note = { id: string; at: string; text: string };
 
@@ -40,6 +41,7 @@ function publicSettings(p: Profile) {
     ai: aiAvailable(),
     onboarded: !!p.onboarded,
     cardsSyncedAt: p.cardsSyncedAt ?? null,
+    name: p.name ?? "", avatar: p.avatar ?? null, createdAt: p.createdAt, socials: p.socials ?? [],
   };
 }
 
@@ -171,6 +173,50 @@ export default async (req: Request, context: Context) => {
       catch (e: any) { delete p.ics; await saveProfile(p); return err(e.message); }
     }
     if (a === "settings" && b === "calendar" && m === "DELETE") { delete p.ics; await saveProfile(p); await store().delete(`u/${uid}/cache/calendar`); return json({ settings: publicSettings(p) }); }
+    if (a === "settings" && b === "profile" && m === "POST") {
+      const d = await body(req);
+      if (typeof d.name === "string") p.name = str(d.name, 60);
+      if (typeof d.avatar === "string") { const mm = await getMeta(uid, str(d.avatar, 40)); if (!mm?.type.startsWith("image/")) return err("Upload a photo first."); p.avatar = mm.id; }
+      if (d.avatar === null) p.avatar = undefined;
+      await saveProfile(p);
+      return json({ settings: publicSettings(p) });
+    }
+    if (a === "settings" && b === "socials" && m === "POST") {
+      const d = await body(req);
+      const next = cleanSocials(d.socials);
+      // keep stats already recorded for accounts that stay
+      for (const s of next) { const old = p.socials?.find((o) => o.platform === s.platform && o.handle.toLowerCase() === s.handle.toLowerCase()); if (old) Object.assign(s, { followers: s.followers ?? old.followers, following: s.following ?? old.following, posts: s.posts ?? old.posts, reach: s.reach ?? old.reach, views: s.views ?? old.views, engagement: s.engagement ?? old.engagement, statsAt: s.statsAt ?? old.statsAt, history: old.history ?? [] }); }
+      p.socials = next; await saveProfile(p);
+      return json({ settings: publicSettings(p) });
+    }
+    if (a === "social" && b === "screenshot" && m === "POST") {
+      const type = (req.headers.get("content-type") || "").split(";")[0];
+      if (!/^image\/(jpeg|png|webp)$/.test(type)) return err("Send a JPEG or PNG screenshot.");
+      const buf = Buffer.from(await req.arrayBuffer());
+      if (buf.byteLength > 4.5 * 1024 * 1024) return err("That screenshot is too large.");
+      const r = await readSocialShot(buf, type);
+      if (!r.platform) return json({ logged: false, reason: "Couldn't tell which platform that is. Nothing was saved." });
+      const socials = p.socials ?? [];
+      let s = socials.find((x) => x.platform === r.platform && (!r.handle || x.handle.toLowerCase() === r.handle.toLowerCase())) || socials.find((x) => x.platform === r.platform);
+      if (!s) { if (!r.handle) return json({ logged: false, reason: `No ${r.platform} account on your profile yet, and the screenshot doesn't show a handle. Add the account first.` }); s = { platform: r.platform, handle: r.handle, url: undefined, history: [] }; socials.push(s); }
+      const now = new Date().toISOString(); const fields: string[] = [];
+      for (const k of ["followers", "following", "posts", "reach", "views", "engagement"] as const) if (r[k] != null) { (s as any)[k] = r[k]; fields.push(`${k} ${r[k]!.toLocaleString()}`); }
+      if (!fields.length) return json({ logged: false, reason: "No numbers found on that screenshot, so nothing was saved." });
+      s.statsAt = now; s.history = [...(s.history ?? []), { at: now, followers: r.followers, reach: r.reach, views: r.views }].slice(-60);
+      p.socials = cleanSocials(socials); await saveProfile(p);
+      return json({ logged: true, platform: r.platform, handle: s.handle, fields, period: r.period, settings: publicSettings(p) });
+    }
+    if (a === "account" && m === "DELETE") {
+      const d = await body(req);
+      if (str(d.confirm, 200).toLowerCase() !== p.email) return err("Type your email exactly to confirm.");
+      const { blobs } = await store().list({ prefix: `u/${uid}/` });
+      for (let i = 0; i < blobs.length; i += 20) await Promise.all(blobs.slice(i, i + 20).map((b) => store().delete(b.key)));
+      await store().delete(emailKey(p.email));
+      if (p.ingestKey) await store().delete(`ingest/${p.ingestKey}`);
+      const owner = await getJSON<{ uid: string }>("system/owner");
+      if (owner?.uid === uid) await store().delete("system/owner");
+      return json({ ok: true }, 200, { "set-cookie": clearSessionCookie() });
+    }
     if (a === "settings" && b === "onboarded" && m === "POST") { p.onboarded = true; await saveProfile(p); return json({ settings: publicSettings(p) }); }
     if (a === "cards" && b === "sync" && m === "POST") {
       if (!p.ics) return err("Connect Google Calendar first.");

@@ -106,6 +106,7 @@ export async function decrypt(box: string) {
 export type Profile = {
   uid: string; email: string; createdAt: string; tz?: string;
   ingestKey?: string; onboarded?: boolean; cardsSyncedAt?: string;
+  name?: string; avatar?: string; socials?: import("./social.mts").Social[];
   oura?: { enc: string; lastSync?: string; lastError?: string };
   ics?: { enc: string };
 };
