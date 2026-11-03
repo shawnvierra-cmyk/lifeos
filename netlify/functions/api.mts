@@ -8,7 +8,7 @@ import {
   newId, saveProfile, sessionUid, setJSON, store, verifyPassword, ymdInTz, type Profile,
 } from "../lib/core.mts";
 import { checkOuraToken, ingestAppleRows, listDays, logDay, putDay, readScreenshot, faceFocus, writeGuide, aiAvailable, aiSource, SOURCES, cleanFields, type Source, type Day } from "../lib/health.mts";
-import { calendarEvents, validIcsUrl } from "../lib/calendar.mts";
+import { calendarEvents, calendarSources, hasCalendar, fetchIcs, icsHost, parseEvents, validIcsUrl, MAX_CALENDARS } from "../lib/calendar.mts";
 import { deleteMedia, getMeta, putChunk, putWhole, readWhole, serveMedia } from "../lib/media.mts";
 import { downloadCommons, searchCommons } from "../lib/photos.mts";
 import { syncOura } from "../lib/health.mts";
@@ -36,7 +36,7 @@ function publicSettings(p: Profile) {
   return {
     email: p.email, tz: p.tz,
     oura: p.oura ? { connected: true, lastSync: p.oura.lastSync ?? null, lastError: p.oura.lastError ?? null } : { connected: false },
-    calendar: { connected: !!p.ics },
+    calendar: { connected: hasCalendar(p), list: calendarSources(p).map((c) => ({ id: c.id, label: c.label, host: c.host })) },
     ingestKey: p.ingestKey ?? null,
     ai: aiAvailable(),
     onboarded: !!p.onboarded,
@@ -166,13 +166,31 @@ export default async (req: Request, context: Context) => {
       return json({ settings: publicSettings(p), sync: r });
     }
     if (a === "settings" && b === "calendar" && m === "POST") {
-      const u = validIcsUrl(str((await body(req)).url, 2000));
-      if (!u) return err("Paste the secret address in iCal format from Google Calendar settings.");
-      p.ics = { enc: await encrypt(u) }; await saveProfile(p);
-      try { const r = await calendarEvents(p, true); return json({ settings: publicSettings(p), count: r.events.length }); }
-      catch (e: any) { delete p.ics; await saveProfile(p); return err(e.message); }
+      const d = await body(req);
+      const u = validIcsUrl(str(d.url, 2000));
+      if (!u) return err("Paste the secret address in iCal format from your calendar's settings.");
+      const have = calendarSources(p);
+      if (have.length >= MAX_CALENDARS) return err(`Up to ${MAX_CALENDARS} calendars per account.`);
+      const enc = await encrypt(u);
+      const label = str(d.label, 30) || (have.length === 0 ? "Personal" : have.length === 1 ? "Work" : `Calendar ${have.length + 1}`);
+      if (have.some((c) => c.label.toLowerCase() === label.toLowerCase())) return err(`You already have a calendar called ${label}. Pick another name.`);
+      let count = 0;
+      try { count = parseEvents(await fetchIcs(enc, `your ${label} calendar`), new Date(Date.now() - 2 * 864e5), new Date(Date.now() + 45 * 864e5)).length; }
+      catch (e: any) { return err(e.message); }
+      // Move a single pre-existing address into the list so everything lives in one place.
+      if (p.ics?.enc) { p.calendars = [{ id: newId(6), label: "Calendar", enc: p.ics.enc, host: "Google", addedAt: p.createdAt }, ...(p.calendars || [])]; delete p.ics; }
+      p.calendars = [...(p.calendars || []), { id: newId(6), label, enc, host: icsHost(u), addedAt: new Date().toISOString() }];
+      await saveProfile(p); await store().delete(`u/${uid}/cache/calendar`);
+      return json({ settings: publicSettings(p), count, label });
     }
-    if (a === "settings" && b === "calendar" && m === "DELETE") { delete p.ics; await saveProfile(p); await store().delete(`u/${uid}/cache/calendar`); return json({ settings: publicSettings(p) }); }
+    if (a === "settings" && b === "calendar" && m === "DELETE") {
+      const id = str((await body(req)).id, 40);
+      if (!id) { delete p.ics; delete p.calendars; }
+      else if (id === "legacy") delete p.ics;
+      else p.calendars = (p.calendars || []).filter((c) => c.id !== id);
+      await saveProfile(p); await store().delete(`u/${uid}/cache/calendar`);
+      return json({ settings: publicSettings(p) });
+    }
     if (a === "settings" && b === "profile" && m === "POST") {
       const d = await body(req);
       if (typeof d.name === "string") p.name = str(d.name, 60);
@@ -219,7 +237,7 @@ export default async (req: Request, context: Context) => {
     }
     if (a === "settings" && b === "onboarded" && m === "POST") { p.onboarded = true; await saveProfile(p); return json({ settings: publicSettings(p) }); }
     if (a === "cards" && b === "sync" && m === "POST") {
-      if (!p.ics) return err("Connect Google Calendar first.");
+      if (!hasCalendar(p)) return err("Connect a calendar first.");
       if (!aiAvailable()) return err("Card building needs Claude, which isn't switched on for this site yet.", 503);
       const r = await syncCards(p);
       return json({ ...r, settings: publicSettings(p) });
@@ -231,7 +249,7 @@ export default async (req: Request, context: Context) => {
       return json({ settings: publicSettings(p) });
     }
     if (a === "calendar" && m === "GET") {
-      if (!p.ics) return json({ connected: false, events: [] });
+      if (!hasCalendar(p)) return json({ connected: false, events: [] });
       try { const r = await calendarEvents(p, url.searchParams.get("force") === "1"); return json({ connected: true, ...r }); }
       catch (e: any) { return json({ connected: true, events: [], error: e.message }); }
     }

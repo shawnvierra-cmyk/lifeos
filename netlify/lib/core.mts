@@ -108,7 +108,8 @@ export type Profile = {
   ingestKey?: string; onboarded?: boolean; cardsSyncedAt?: string;
   name?: string; avatar?: string; socials?: import("./social.mts").Social[];
   oura?: { enc: string; lastSync?: string; lastError?: string };
-  ics?: { enc: string };
+  ics?: { enc: string }; // one calendar, from before several were allowed
+  calendars?: import("./calendar.mts").CalSource[];
 };
 export const profileKey = (uid: string) => `u/${uid}/profile`;
 export const getProfile = (uid: string) => getJSON<Profile>(profileKey(uid));

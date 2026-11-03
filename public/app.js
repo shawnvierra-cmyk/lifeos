@@ -257,7 +257,7 @@ function vToday() {
 function calEvents() { return S.cal.events.map((e) => ({ ...e, s: e.allDay ? parseYmd(e.start) : new Date(e.start), e: e.allDay ? parseYmd(e.end) : new Date(e.end) })); }
 function upcomingHtml(n) {
   const c = S.cal;
-  if (!c.connected) return `<div class="small muted">Connect Google Calendar in settings to see what's next.</div><div class="actions"><button class="btn ghost" data-act="settings">Connect</button></div>`;
+  if (!c.connected) return `<div class="small muted">Connect a calendar in settings to see what's next.</div><div class="actions"><button class="btn ghost" data-act="settings">Connect</button></div>`;
   if (c.status === "loading" && !c.events.length) return `<div class="small muted"><span class="spin" style="width:14px;height:14px;vertical-align:-2px"></span> Loading your calendar…</div>`;
   const list = calEvents().filter((e) => e.e > new Date()).slice(0, n);
   if (!list.length) return `<div class="small muted">${c.error ? esc(c.error) : "Nothing else on the calendar in the next few weeks."}</div>`;
@@ -265,7 +265,8 @@ function upcomingHtml(n) {
 }
 function evRow(e) {
   const day = ymd(e.s) === todayStr() ? "Today" : e.s.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
-  return `<div class="ev"><div class="t">${e.allDay ? "All day" : fmtTime(e.s)}<small>${esc(day)}</small></div><div style="min-width:0"><div class="s">${esc(e.title)}</div>${e.location ? `<div class="l">${esc(e.location)}</div>` : ""}</div></div>`;
+  const tag = e.cal && (S.settings?.calendar?.list || []).length > 1 ? `<span class="caltag">${esc(e.cal)}</span>` : "";
+  return `<div class="ev"><div class="t">${e.allDay ? "All day" : fmtTime(e.s)}<small>${esc(day)}</small></div><div style="min-width:0"><div class="s">${esc(e.title)}${tag}</div>${e.location ? `<div class="l">${esc(e.location)}</div>` : ""}</div></div>`;
 }
 
 /* Health */
@@ -362,7 +363,7 @@ function vTrips() {
   const show = S.tripSeg === "upcoming" ? up : past; const sugg = calSuggestions();
   const auto = cal
     ? `<div class="small muted" style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span>${S.syncing ? spinner("Building cards from your calendar…") : `Built from your calendar.${synced ? " " + esc(synced) + "." : ""}`}</span>${S.syncing ? "" : `<button class="link" data-act="synccards">Refresh</button>`}</div>`
-    : `<section class="card"><div class="label">Automatic cards</div><p style="margin:8px 0 0">Connect Google Calendar and your trips, concerts and events build themselves from the flights, tickets and reservations already on it. Nothing to type in.</p><div class="actions"><button class="btn volt" data-act="settings">Connect Google Calendar</button></div></section>`;
+    : `<section class="card"><div class="label">Automatic cards</div><p style="margin:8px 0 0">Connect your calendars and your trips, concerts and events build themselves from the flights, tickets and reservations already on it. Nothing to type in.</p><div class="actions"><button class="btn volt" data-act="settings">Connect a calendar</button></div></section>`;
   $("#view").innerHTML = `
     ${auto}
     <div class="seg" role="group" aria-label="Filter"><button data-seg="upcoming" aria-pressed="${S.tripSeg === "upcoming"}">Upcoming ${up.length}</button><button data-seg="past" aria-pressed="${S.tripSeg === "past"}">Past ${past.length}</button></div>
@@ -376,7 +377,7 @@ function vCal() {
   const c = S.cal;
   header(`Times in ${TZ.replace(/_/g, " ") || "your time zone"}`, "Calendar", `<button class="iconbtn" data-more="none" aria-label="Back">${icon(I.back, 20)}</button>${c.fetchedAt ? `<span class="chip">Updated ${esc(fmtTime(new Date(c.fetchedAt)))}</span>` : ""}`);
   let html;
-  if (!c.connected) html = `<section class="card"><div class="label">Google Calendar</div><p>Paste your calendar's secret iCal address in settings. LifeOS refreshes it every 5 minutes and shows times in your time zone.</p><button class="btn" data-act="settings">Connect Google Calendar</button></section>`;
+  if (!c.connected) html = `<section class="card"><div class="label">Calendars</div><p>Add your personal and work calendars in settings. LifeOS merges them, refreshes every 5 minutes and shows times in your time zone.</p><button class="btn" data-act="settings">Connect a calendar</button></section>`;
   else if (!c.events.length && c.status === "loading") html = `<section class="card empty"><span class="spin"></span><div style="margin-top:8px">Loading your calendar…</div></section>`;
   else if (!c.events.length) html = `<section class="card empty">${c.error ? esc(c.error) : "Nothing on your calendar for the next few weeks."}</section>`;
   else {
@@ -449,7 +450,7 @@ function vProfile() {
   const socials = st.socials || [];
   const total = socials.reduce((a, s) => a + (s.followers || 0), 0);
   const conn = [
-    ["Google Calendar", st.calendar?.connected, "Cards build from it"], ["Oura", st.oura?.connected, "Daily sleep and readiness"],
+    [(st.calendar?.list || []).length > 1 ? `${st.calendar.list.length} calendars` : "Calendar", st.calendar?.connected, (st.calendar?.list || []).map((c) => c.label).join(", ") || "Cards build from it"], ["Oura", st.oura?.connected, "Daily sleep and readiness"],
     ["Apple Health", !!latestFor(S.days, "apple"), "Steps, sleep, HRV via Shortcut"], ["Screenshot reading", st.ai, "Scale, Eight Sleep, Insights"],
   ];
   $("#view").innerHTML = `
@@ -1015,7 +1016,7 @@ async function syncCards(quiet = false) {
 
 /* ---------- settings ---------- */
 function settingsSheet(onboarding = false) {
-  const st = S.settings; const ingestUrl = `${location.origin}/api/ingest/apple`;
+  const st = S.settings; const ingestUrl = `${location.origin}/api/ingest/apple`; const cals = st.calendar?.list || [];
   sheet(`${onboarding
     ? `<h2>Set up LifeOS</h2><p class="muted">Three connections, all optional, each about a minute. You can come back to any of them from the gear icon.</p>`
     : `<h2>Connections</h2><p class="muted small">Signed in as ${esc(st.email)}</p>`}
@@ -1024,11 +1025,13 @@ function settingsSheet(onboarding = false) {
       <div class="field"><label class="label" for="ouraTok">Personal access token</label><input id="ouraTok" type="password" autocomplete="off" placeholder="Paste from cloud.ouraring.com"></div>
       <div class="small muted" style="margin-top:6px">Create one at <a class="link" href="https://cloud.ouraring.com/personal-access-tokens" target="_blank" rel="noopener">cloud.ouraring.com/personal-access-tokens</a>. It's stored encrypted.</div>
       <div class="actions"><button class="btn volt" id="ouraOn">Connect Oura</button></div>`}
-    <div class="conn"><div><h4>Google Calendar</h4><div class="small muted">${st.calendar.connected ? "Connected. Refreshes every 5 minutes." : "Uses your calendar's private iCal address."}</div></div><span class="chip ${st.calendar.connected ? "ok" : "wait"}">${st.calendar.connected ? "On" : "Off"}</span></div>
-    ${st.calendar.connected ? `<div class="actions"><button class="btn ghost" id="calOff">Disconnect</button></div>` : `
-      <div class="small">Your trips, concerts and events build themselves from this. On a computer, open <a class="link" href="https://calendar.google.com/calendar/r/settings" target="_blank" rel="noopener">Google Calendar settings</a>, pick your calendar on the left, scroll to <b>Integrate calendar</b>, and copy <b>Secret address in iCal format</b>.</div>
+    <div class="conn"><div><h4>Calendars</h4><div class="small muted">${cals.length ? `${cals.length === 1 ? "One calendar" : cals.length + " calendars"} connected. Refresh every 5 minutes, merged into one view.` : "Personal and work, Google, iCloud or Outlook. Each one uses its private iCal address."}</div></div><span class="chip ${cals.length ? "ok" : "wait"}">${cals.length ? "On" : "Off"}</span></div>
+    ${cals.map((c) => `<div class="calrow"><div style="min-width:0"><div style="font-weight:600">${esc(c.label)}</div><div class="small muted">${esc(c.host)}</div></div><button class="btn ghost" data-calrm="${esc(c.id)}" data-label="${esc(c.label)}" style="height:34px">Remove</button></div>`).join("")}
+    ${cals.length < 6 ? `
+      <div class="small" style="margin-top:${cals.length ? 10 : 0}px">${cals.length ? "Add another, like your work calendar." : "Your trips, concerts and events build themselves from these."} On a computer, open <a class="link" href="https://calendar.google.com/calendar/r/settings" target="_blank" rel="noopener">Google Calendar settings</a>, pick the calendar on the left, scroll to <b>Integrate calendar</b>, and copy <b>Secret address in iCal format</b>. For a work account, sign in to that account first. Outlook: Settings, Calendar, Shared calendars, Publish a calendar, copy the ICS link.</div>
+      <div class="field"><label class="label" for="icsLabel">Name</label><input id="icsLabel" type="text" autocomplete="off" maxlength="30" placeholder="${cals.length ? (cals.some((c) => /work/i.test(c.label)) ? "Family" : "Work") : "Personal"}"></div>
       <div class="field"><label class="label" for="icsUrl">Secret iCal address</label><input id="icsUrl" type="url" autocomplete="off" placeholder="https://calendar.google.com/calendar/ical/…/basic.ics"></div>
-      <div class="actions"><button class="btn volt" id="calOn">Connect calendar</button></div>`}
+      <div class="actions"><button class="btn volt" id="calOn">${cals.length ? "Add calendar" : "Connect calendar"}</button></div>` : ""}
     <div class="conn"><div><h4>Apple Health</h4><div class="small muted">A Shortcut automation sends each day's numbers here.</div></div><span class="chip ${latestFor(S.days, "apple") ? "ok" : "wait"}">${latestFor(S.days, "apple") ? "On" : "Off"}</span></div>
     <div class="small">In the Shortcuts app, build a daily automation that finds today's Health samples and sends them with <b>Get Contents of URL</b>:</div>
     <div class="field"><span class="label">URL (method POST)</span><code class="key">${esc(ingestUrl)}</code></div>
@@ -1053,11 +1056,17 @@ function settingsSheet(onboarding = false) {
     });
     el.querySelector("#ouraOff")?.addEventListener("click", async () => { try { const r = await api("settings/oura", { method: "DELETE", body: {} }); S.settings = r.settings; settingsSheet(); render(); toast("Oura disconnected. Your history stays."); } catch (x) { err(x); } });
     el.querySelector("#calOn")?.addEventListener("click", async (e) => {
-      const btn = e.currentTarget; busy(btn, "Connecting");
-      try { const r = await api("settings/calendar", { method: "POST", body: { url: el.querySelector("#icsUrl").value } }); S.settings = r.settings; S.cal.connected = true; settingsSheet(onboarding); loadCalendar(true); toast(`Calendar connected. Building your cards…`); syncCards(); }
-      catch (x) { err(x); btn.disabled = false; btn.textContent = "Connect calendar"; }
+      const btn = e.currentTarget; const was = btn.textContent; busy(btn, "Connecting");
+      try {
+        const r = await api("settings/calendar", { method: "POST", body: { url: el.querySelector("#icsUrl").value, label: el.querySelector("#icsLabel").value } });
+        S.settings = r.settings; S.cal.connected = true; settingsSheet(onboarding); loadCalendar(true);
+        toast(`${esc(r.label)} calendar connected, ${r.count} event${r.count === 1 ? "" : "s"} ahead. Building your cards…`); syncCards();
+      } catch (x) { err(x); btn.disabled = false; btn.textContent = was; }
     });
-    el.querySelector("#calOff")?.addEventListener("click", async () => { try { const r = await api("settings/calendar", { method: "DELETE", body: {} }); S.settings = r.settings; S.cal = { status: "idle", events: [], fetchedAt: null, error: null, connected: false }; settingsSheet(); render(); } catch (x) { err(x); } });
+    el.querySelectorAll("[data-calrm]").forEach((b) => b.addEventListener("click", async () => {
+      if (!b.dataset.armed) { b.dataset.armed = "1"; b.textContent = "Tap again to remove"; return; }
+      try { const r = await api("settings/calendar", { method: "DELETE", body: { id: b.dataset.calrm } }); S.settings = r.settings; S.cal = { ...S.cal, status: "idle", events: [], fetchedAt: null, error: null, connected: !!r.settings.calendar?.connected }; settingsSheet(onboarding); if (S.cal.connected) loadCalendar(true); render(); toast(`${b.dataset.label} calendar removed. Its cards stay.`); } catch (x) { err(x); }
+    }));
     el.querySelector("#copyKey").onclick = async () => { try { await navigator.clipboard.writeText(st.ingestKey); toast("Key copied."); } catch { toast("Press and hold the key to copy it."); } };
     el.querySelector("#newKey").onclick = async (e) => {
       const b = e.currentTarget; if (!b.dataset.armed) { b.dataset.armed = "1"; b.textContent = "Tap again: old key stops working"; return; }

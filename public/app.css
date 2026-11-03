@@ -173,6 +173,8 @@ img{max-width:100%}
 .iconbtn{width:40px;height:40px;border-radius:50%;background:var(--surface);display:grid;place-items:center}
 .conn{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 0;border-top:1px solid var(--line)}
 .conn:first-of-type{border-top:0}
+.calrow{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 12px;margin-top:8px;border-radius:12px;background:var(--surface);border:1px solid var(--line)}
+.caltag{display:inline-block;margin-left:8px;padding:1px 7px;border-radius:99px;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;background:var(--surface);border:1px solid var(--line);color:var(--ink-2);vertical-align:1px}
 .conn h4{margin:0;font-size:16px}
 code.key{display:block;background:var(--bg);border-radius:10px;padding:10px 12px;font-size:12px;overflow-wrap:anywhere;user-select:all}
 .pgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px}

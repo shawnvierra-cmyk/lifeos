@@ -1,6 +1,6 @@
 # LifeOS
 
-A private readiness dashboard that installs on your iPhone like an app. It covers readiness from Apple Health, Oura and Eight Sleep, body composition from smart-scale screenshots, trip and concert journals, Google Calendar and voice notes.
+A private readiness dashboard that installs on your iPhone like an app. It covers readiness from Apple Health, Oura and Eight Sleep, body composition from smart-scale screenshots, trip and concert journals, personal and work calendars and voice notes.
 
 Live at **https://life.from5to10million.com** once the Netlify setup below is done.
 
@@ -29,6 +29,6 @@ Live at **https://life.from5to10million.com** once the Netlify setup below is do
 ## Connections
 
 - **Oura**: paste a personal access token from cloud.ouraring.com/personal-access-tokens in Settings. It's stored encrypted, synced every morning, and also synced when you open the app if the last sync was more than 3 hours ago.
-- **Google Calendar**: paste the calendar's *Secret address in iCal format* in Settings. It refreshes every 5 minutes.
+- **Calendars**: up to six per account, personal and work, Google, iCloud or Outlook. Paste each one's *Secret address in iCal format* in Settings with a name. They are merged into one view and refresh every 5 minutes; one failing never hides the others.
 - **Apple Health**: a Shortcuts automation POSTs each day's numbers to `/api/ingest/apple` with the key shown in Settings. You can also import the full Health export (`export.xml`) from the Health tab.
 - **Eight Sleep and smart scales**: drop or paste screenshots. Only numbers visible in the screenshot are logged, to the day the screenshot shows.

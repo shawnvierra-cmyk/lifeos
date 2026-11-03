@@ -5,6 +5,7 @@ import type { Config } from "@netlify/functions";
 import { getJSON, store, type Profile } from "../lib/core.mts";
 import { syncOura } from "../lib/health.mts";
 import { fillPhotos, syncCards } from "../lib/cards.mts";
+import { hasCalendar } from "../lib/calendar.mts";
 
 export default async () => {
   const { blobs } = await store().list({ prefix: "u/" });
@@ -13,7 +14,7 @@ export default async () => {
     const p = await getJSON<Profile>(key);
     if (!p) continue;
     if (p.oura?.enc) { try { await syncOura(p, 3); } catch (e: any) { console.error(`Oura sync failed for ${p.uid}: ${e.message}`); } }
-    if (p.ics?.enc) {
+    if (hasCalendar(p)) {
       try { await syncCards(p); await fillPhotos(p.uid, 4); } catch (e: any) { console.error(`Card sync failed for ${p.uid}: ${e.message}`); }
     }
   }
