@@ -85,7 +85,7 @@ export default async (req: Request, context: Context) => {
       let storage = false;
       try { await store().list({ prefix: "system/" }); storage = true; } catch {}
       console.log(`LifeOS health: ai=${aiSource()} storage=${storage}`);
-      return json({ ok: storage, ai: aiAvailable(), aiSource: aiSource(), storage, time: new Date().toISOString() });
+      return json({ ok: storage, ai: aiAvailable(), aiSource: aiSource(), storage, deploy: context.deploy?.id || "dev", time: new Date().toISOString() });
     }
     if (a === "auth" && b === "logout" && m === "POST") return json({ ok: true }, 200, { "set-cookie": clearSessionCookie() });
 
@@ -112,7 +112,7 @@ export default async (req: Request, context: Context) => {
       const [days, trips, notes, workouts, routines] = await Promise.all([listDays(uid, since), listJSON<Trip>(`u/${uid}/trip/`), listJSON<Note>(`u/${uid}/note/`), listDocs<Workout>(`u/${uid}/workout/`, 400), listDocs<Routine>(`u/${uid}/routine/`, 50)]);
       notes.sort((x, y) => (x.at < y.at ? 1 : -1));
       workouts.sort((x, y) => (x.date < y.date ? 1 : x.date > y.date ? -1 : x.createdAt < y.createdAt ? 1 : -1));
-      return json({ settings: publicSettings(p), days, trips, notes, workouts, routines });
+      return json({ settings: publicSettings(p), days, trips, notes, workouts, routines, deploy: context.deploy?.id || "dev" });
     }
 
     /* health */

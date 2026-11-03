@@ -650,6 +650,9 @@ const spinner = (txt) => `<span class="spin" style="width:14px;height:14px;verti
 async function loadState() {
   const since = ymd(addDays(new Date(), -400));
   const d = await api(`state?tz=${encodeURIComponent(TZ)}&since=${since}`);
+  // A new build went live since this page loaded: pick it up instead of running stale code.
+  if (S.deploy && d.deploy && d.deploy !== S.deploy) { location.reload(); return; }
+  S.deploy = d.deploy;
   S.settings = d.settings;
   S.days = new Map(d.days.map((x) => [x.date, x]));
   S.trips = d.trips; S.notes = d.notes; S.workouts = d.workouts || []; S.routines = d.routines || [];
