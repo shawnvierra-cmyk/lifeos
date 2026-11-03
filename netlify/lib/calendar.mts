@@ -22,7 +22,9 @@ export async function calendarEvents(p: Profile, force = false): Promise<{ event
   const res = await fetch(await decrypt(p.ics.enc), { headers: { "user-agent": "LifeOS/1.0" } }).catch(() => null);
   if (!res?.ok) {
     if (cached) return cached;
-    throw new Error(res ? `The calendar address returned ${res.status}. Copy the secret iCal address again.` : "Couldn't reach your calendar. Try again in a minute.");
+    throw new Error(!res ? "Couldn't reach your calendar. Try again in a minute."
+      : res.status === 404 ? "Google returned 404, which happens with the public iCal address. In Google Calendar settings, scroll to Integrate calendar and copy the one labelled Secret address in iCal format."
+      : `The calendar address returned ${res.status}. Copy the secret iCal address again.`);
   }
   const data = ical.sync.parseICS(await res.text());
   const from = new Date(Date.now() - 2 * 864e5), to = new Date(Date.now() + 45 * 864e5);

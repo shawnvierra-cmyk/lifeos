@@ -17,7 +17,7 @@ export async function searchCommons(q: string): Promise<PhotoHit[]> {
   const hits: PhotoHit[] = [];
   for (const p of pages) {
     const ii = p.imageinfo?.[0];
-    if (!ii || !/^image\/(jpeg|png|webp)$/.test(ii.mime) || ii.width < 900 || ii.width < ii.height * 0.9) continue;
+    if (!ii || !/^image\/(jpeg|png|webp)$/.test(ii.mime) || ii.width < 700) continue;
     const md = ii.extmetadata ?? {};
     const artist = strip(md.Artist?.value) || "Unknown author";
     const license = strip(md.LicenseShortName?.value) || "see source";
@@ -30,9 +30,10 @@ export async function searchCommons(q: string): Promise<PhotoHit[]> {
       credit: `Photo: ${artist.slice(0, 80)} / Wikimedia Commons, ${license}`,
       source: ii.descriptionurl,
     });
-    if (hits.length >= 12) break;
+    if (hits.length >= 16) break;
   }
-  return hits;
+  // Wide photos first: they fill a 16:10 header without heavy cropping.
+  return hits.sort((a, b) => Number(b.width >= b.height * 0.9) - Number(a.width >= a.height * 0.9)).slice(0, 12);
 }
 
 export async function downloadCommons(url: string) {

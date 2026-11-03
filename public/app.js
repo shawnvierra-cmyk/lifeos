@@ -338,7 +338,11 @@ function vTrips() {
   const show = S.tripSeg === "upcoming" ? up : past; const sugg = calSuggestions();
   $("#view").innerHTML = `
     ${isSample ? sampleBanner("Sample trips.") : ""}
-    <div class="seg" role="group" aria-label="Filter"><button data-seg="upcoming" aria-pressed="${S.tripSeg === "upcoming"}">Upcoming ${up.length}</button><button data-seg="past" aria-pressed="${S.tripSeg === "past"}">Past ${past.length}</button></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+      <div class="seg" role="group" aria-label="Filter"><button data-seg="upcoming" aria-pressed="${S.tripSeg === "upcoming"}">Upcoming ${up.length}</button><button data-seg="past" aria-pressed="${S.tripSeg === "past"}">Past ${past.length}</button></div>
+      <button class="btn ghost" data-act="importcards" style="height:36px">Import cards file</button>
+    </div>
+    <div class="progress" id="cardsProg" hidden><i></i></div>
     ${sugg.length && S.tripSeg === "upcoming" ? `<section class="card"><div class="label" style="margin-bottom:6px">From your calendar</div>${sugg.map((e) => `<div class="suggest"><div style="min-width:0"><div style="font-weight:600;overflow-wrap:anywhere">${esc(e.title)}</div><div class="small muted">${esc(e.s.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }))}${e.location ? " · " + esc(e.location) : ""}</div></div><button class="btn ghost" data-mkcard="${esc(e.id)}" style="height:36px;flex:none">Make card</button></div>`).join("")}</section>` : ""}
     ${show.length ? show.map((t) => tripCard(t, isSample)).join("") : `<div class="empty">No ${S.tripSeg} cards yet.</div>`}`;
 }
@@ -570,12 +574,21 @@ function tripForm(t = {}) {
     };
   });
 }
+function fmtWhen(at) {
+  if (!at) return "";
+  const m = at.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}))?/); if (!m) return at;
+  const d = new Date(+m[1], +m[2] - 1, +m[3], m[4] ? +m[4] : 12, m[5] ? +m[5] : 0);
+  const day = d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  return m[4] ? `${day} ${fmtTime(d)}` : day;
+}
 function tripDetail(id) {
   const isSample = !S.trips.length; const t = tripsSrc().find((x) => x.id === id); if (!t) return;
   const range = t.end && t.end !== t.start ? `${fmtDay(t.start)} – ${fmtDay(t.end)}` : fmtDay(t.start);
   const entries = [...(t.journal || [])].sort((a, b) => (a.at < b.at ? 1 : -1));
   sheet(`<div class="cover" style="border-radius:16px;margin:0 0 14px">${coverHtml(t)}</div>
     <h2>${esc(t.title)}</h2><div class="muted">${esc(t.place || "")}${t.place ? " · " : ""}${esc(range)}</div>
+    ${t.summary ? `<p class="summary">${esc(t.summary)}</p>` : ""}
+    ${t.itinerary?.length ? `<div class="itin"><div class="label">Itinerary</div>${[...t.itinerary].sort((a, b) => (a.at < b.at ? -1 : 1)).map((i) => `<div class="row"><span class="w">${esc(fmtWhen(i.at))}</span><span>${esc(i.text)}</span></div>`).join("")}</div>` : ""}
     ${t.photo?.source ? `<div class="small" style="margin-top:4px"><a class="link" href="${esc(t.photo.source)}" target="_blank" rel="noopener">Photo source and license</a></div>` : ""}
     ${isSample ? `<div style="margin-top:12px">${sampleBanner("This is a sample card.")}</div><div class="actions"><button class="btn volt wide" data-act="newtrip">Make your first card</button></div>` : `
     <div class="actions"><button class="btn" id="setPhoto">${t.photo ? "Change header photo" : "Add header photo"}</button><button class="btn ghost" id="editTrip">Edit</button></div>
@@ -724,6 +737,7 @@ document.addEventListener("click", async (e) => {
   else if (act === "apple") $("#fileApple").click();
   else if (act === "settings") settingsSheet();
   else if (act === "newtrip") tripForm();
+  else if (act === "importcards") $("#fileCards").click();
   else if (act === "ourasync") {
     a.disabled = true; toast(spinner("Syncing Oura…"));
     try { const r = await api("sync/oura", { method: "POST", body: {} }); S.settings = r.settings; await loadState(); render(); if ($("#scrim")) settingsSheet(); toast(`Oura synced. ${r.sync.days} day${r.sync.days === 1 ? "" : "s"} updated.`); }
@@ -738,6 +752,24 @@ document.addEventListener("click", async (e) => {
   else if (act === "dictate") dictate();
 });
 $("#fileShots").onchange = (e) => { const f = [...e.target.files]; e.target.value = ""; handleShots(f); };
+$("#fileCards").onchange = async (e) => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  let cards;
+  try { const j = JSON.parse(await f.text()); cards = Array.isArray(j) ? j : j.cards || j.trips || []; } catch { toast("That file isn't a cards file (JSON)."); return; }
+  if (!cards.length) { toast("No cards in that file."); return; }
+  const prog = $("#cardsProg"); if (prog) prog.hidden = false;
+  let done = 0, skipped = 0;
+  try {
+    for (let i = 0; i < cards.length; i += 2) {
+      toast(spinner(`Making cards ${Math.min(i + 2, cards.length)} of ${cards.length}…`));
+      const r = await api("import/cards", { method: "POST", body: { cards: cards.slice(i, i + 2) } });
+      done += r.imported.length; skipped += r.skipped;
+      if (prog) prog.firstElementChild.style.width = `${((i + 2) / cards.length) * 100}%`;
+    }
+    await loadState(); render();
+    toast(done ? `${done} card${done === 1 ? "" : "s"} added${skipped ? `, ${skipped} already there` : ""}.` : "Those cards were already here.");
+  } catch (x) { toast(esc(x.message)); if (prog) prog.hidden = true; }
+};
 $("#fileApple").onchange = async (e) => {
   const f = e.target.files[0]; e.target.value = ""; if (!f) return;
   try {

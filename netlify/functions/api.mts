@@ -15,6 +15,7 @@ import { syncOura } from "../lib/health.mts";
 
 type Trip = {
   id: string; title: string; type: "trip" | "concert" | "event"; place: string; start: string; end: string; calId?: string;
+  seedId?: string; summary?: string; itinerary?: { at: string; text: string }[];
   photo?: { media: string; credit: string; focus: number; source?: string };
   journal: { id: string; at: string; text: string; media: { id: string; type: string }[] }[];
   createdAt: string;
@@ -34,6 +35,19 @@ async function listJSON<T>(prefix: string): Promise<T[]> {
   return out;
 }
 const body = async (req: Request) => { try { return await req.json(); } catch { return {}; } };
+/** A credited Wikimedia Commons header for an imported card. Returns undefined when nothing suitable is found. */
+async function autoPhoto(uid: string, query: string, framePerson: boolean): Promise<Trip["photo"] | undefined> {
+  try {
+    const hit = (await searchCommons(query))[0];
+    if (!hit) return undefined;
+    const dl = await downloadCommons(hit.url);
+    const id = newId(12);
+    await putWhole(uid, id, dl.type, dl.data, "header");
+    let focus = 25;
+    if (framePerson && dl.data.byteLength < 4.5 * 1024 * 1024) { const f = await faceFocus(Buffer.from(dl.data), dl.type); if (f !== null) focus = Math.max(0, f - 8); }
+    return { media: id, credit: hit.credit, focus, source: hit.source };
+  } catch (e) { console.error("autoPhoto failed", (e as any)?.message); return undefined; }
+}
 const str = (v: unknown, max = 500) => (typeof v === "string" ? v.trim().slice(0, max) : "");
 
 function publicSettings(p: Profile) {
@@ -202,6 +216,8 @@ export default async (req: Request, context: Context) => {
       const t: Trip = {
         id, title: str(d.title, 120) || "Untitled", type: ["trip", "concert", "event"].includes(d.type) ? d.type : "trip",
         place: str(d.place, 160), start, end, calId: str(d.calId, 300) || prev?.calId,
+        seedId: prev?.seedId, summary: typeof d.summary === "string" ? str(d.summary, 4000) : prev?.summary,
+        itinerary: Array.isArray(d.itinerary) ? d.itinerary.slice(0, 60).map((x: any) => ({ at: str(x?.at, 20), text: str(x?.text, 300) })).filter((x: any) => x.text) : prev?.itinerary,
         photo: prev?.photo, journal: prev?.journal ?? [], createdAt: prev?.createdAt ?? new Date().toISOString(),
       };
       await setJSON(tripKey(uid, id), t);
@@ -251,6 +267,33 @@ export default async (req: Request, context: Context) => {
       const q = str(url.searchParams.get("q"), 120);
       if (!q) return json({ hits: [] });
       return json({ hits: await searchCommons(q) });
+    }
+
+    /* cards from a file (Claude's email scan, a Muse export, or your own JSON). At most 2 per call: each may fetch a photo. */
+    if (a === "import" && b === "cards" && m === "POST") {
+      const d = await body(req);
+      const cards: any[] = Array.isArray(d.cards) ? d.cards.slice(0, 2) : [];
+      if (!cards.length) return err("No cards in that file.");
+      const have = new Set((await listJSON<Trip>(`u/${uid}/trip/`)).map((t) => t.seedId).filter(Boolean));
+      const imported: string[] = []; let skipped = 0;
+      for (const c of cards) {
+        const title = str(c?.title, 120); const start = isYmd(c?.start) ? c.start : null;
+        if (!title || !start) { skipped++; continue; }
+        const seedId = str(c?.seedId, 80) || undefined;
+        if (seedId && have.has(seedId)) { skipped++; continue; }
+        const type = ["trip", "concert", "event"].includes(c?.type) ? c.type : "trip";
+        const t: Trip = {
+          id: newId(), seedId, title, type, place: str(c?.place, 160), start, end: isYmd(c?.end) && c.end >= start ? c.end : start,
+          summary: str(c?.summary, 4000) || undefined,
+          itinerary: Array.isArray(c?.itinerary) ? c.itinerary.slice(0, 60).map((x: any) => ({ at: str(x?.at, 20), text: str(x?.text, 300) })).filter((x: any) => x.text) : undefined,
+          journal: [], createdAt: new Date().toISOString(),
+        };
+        t.photo = await autoPhoto(uid, str(c?.photoQuery, 120) || `${title} ${t.place}`.trim(), type === "concert");
+        await setJSON(tripKey(uid, t.id), t);
+        if (seedId) have.add(seedId);
+        imported.push(title);
+      }
+      return json({ imported, skipped });
     }
 
     /* notes */
