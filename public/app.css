@@ -189,3 +189,46 @@ code.key{display:block;background:var(--bg);border-radius:10px;padding:10px 12px
 .itin .row{display:grid;grid-template-columns:104px minmax(0,1fr);gap:10px;padding:8px 0;border-top:1px solid var(--line);font-size:14px}
 .itin .row:first-of-type{border-top:0}
 .itin .w{color:var(--ink-2);font-variant-numeric:tabular-nums;font-weight:600;line-height:1.35}
+
+/* More */
+.morerow{display:flex;align-items:center;gap:14px;width:100%;text-align:left;padding:16px}
+.morerow .ic{flex:none;width:44px;height:44px;border-radius:12px;background:var(--bg);display:grid;place-items:center}
+.morerow b{display:block;font-size:17px}
+/* Training */
+.vol .num.big{font-size:clamp(44px,15vw,64px);margin-top:4px;color:var(--volt-text)}
+.trio3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+.trio3 .num{font-size:clamp(20px,6.4vw,28px);margin-top:4px;white-space:nowrap}
+.trio3 .from{font-size:11px;color:var(--ink-3);margin-top:4px}
+.milehead{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-top:16px}
+.vol .progress{margin-top:8px;height:8px}
+.vol .progress i{background:var(--volt)}
+.miles{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin-top:12px}
+.mile{border:1px solid var(--line);border-radius:10px;padding:8px 4px;text-align:center;color:var(--ink-3)}
+.mile b{display:block;font-size:9.5px;letter-spacing:.02em;text-transform:uppercase;line-height:1.15}
+.mile span{font-size:10px}
+.mile.hit{background:var(--volt);color:#0B0B0A;border-color:var(--volt)}
+.mile.hit b,.mile.hit span{color:#0B0B0A}
+.talk{display:flex;align-items:center;gap:14px;width:100%;text-align:left;padding:16px;border:2px solid var(--volt)}
+.talk .ic{flex:none;width:48px;height:48px;border-radius:14px;background:var(--volt);color:#0B0B0A;display:grid;place-items:center}
+.talk b{display:block;font-size:17px}
+.wrow{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;text-align:left;padding:14px 16px}
+.wrow .chip{flex:none}
+.ex{padding:12px 0;border-top:1px solid var(--line)}
+.exh{display:flex;align-items:center;gap:8px}
+.exname{flex:1;min-width:0;font-size:17px;font-weight:600;border:0;border-bottom:1px solid transparent;background:none;padding:4px 0}
+.exname:focus{outline:0;border-bottom-color:var(--ink)}
+.exdone{flex:none;width:30px;height:30px;border-radius:50%;border:2px solid var(--line);display:grid;place-items:center;color:transparent}
+.exdone.on{background:var(--volt);border-color:var(--volt);color:#0B0B0A}
+.mini{width:64px;border:1px solid var(--line);border-radius:8px;background:var(--bg);padding:3px 6px;font-size:13px}
+.sets{margin-top:8px}
+.setrow{display:grid;grid-template-columns:40px minmax(0,1fr) 24px minmax(0,1fr);gap:8px;align-items:center;padding:4px 0}
+.setrow.head{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
+.setrow input{height:42px;border:1px solid var(--line);border-radius:10px;background:var(--bg);padding:0 10px;font-size:16px;width:100%;min-width:0;font-variant-numeric:tabular-nums}
+.setrow .u{font-size:12px;color:var(--ink-3)}
+.setrow .n{width:36px;height:36px;border-radius:50%;border:2px solid var(--line);font-weight:700;font-size:14px;display:grid;place-items:center}
+.setrow.done .n{background:var(--volt);border-color:var(--volt);color:#0B0B0A}
+.setrow.done input{opacity:.75}
+.sessh{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.h2in{font-family:var(--display);font-style:italic;font-weight:900;font-size:28px;text-transform:uppercase;border:0;background:none;width:100%;min-width:0;padding:0;line-height:1}
+.h2in:focus{outline:0}
+.link.small{font-size:12px}

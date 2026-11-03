@@ -13,6 +13,7 @@ import { deleteMedia, getMeta, putChunk, putWhole, readWhole, serveMedia } from 
 import { downloadCommons, searchCommons } from "../lib/photos.mts";
 import { syncOura } from "../lib/health.mts";
 import { syncCards, fillPhotos, autoPhoto, tripKey, type Trip } from "../lib/cards.mts";
+import { assist, listDocs, newWorkout, routineKey, workoutKey, cleanExercises, type Workout, type Routine } from "../lib/training.mts";
 
 type Note = { id: string; at: string; text: string };
 
@@ -108,9 +109,10 @@ export default async (req: Request, context: Context) => {
       const tz = url.searchParams.get("tz");
       if (tz && tz !== p.tz && tz.length < 60) { p.tz = tz; await saveProfile(p); }
       const since = url.searchParams.get("since") || undefined;
-      const [days, trips, notes] = await Promise.all([listDays(uid, since), listJSON<Trip>(`u/${uid}/trip/`), listJSON<Note>(`u/${uid}/note/`)]);
+      const [days, trips, notes, workouts, routines] = await Promise.all([listDays(uid, since), listJSON<Trip>(`u/${uid}/trip/`), listJSON<Note>(`u/${uid}/note/`), listDocs<Workout>(`u/${uid}/workout/`, 400), listDocs<Routine>(`u/${uid}/routine/`, 50)]);
       notes.sort((x, y) => (x.at < y.at ? 1 : -1));
-      return json({ settings: publicSettings(p), days, trips, notes });
+      workouts.sort((x, y) => (x.date < y.date ? 1 : x.date > y.date ? -1 : x.createdAt < y.createdAt ? 1 : -1));
+      return json({ settings: publicSettings(p), days, trips, notes, workouts, routines });
     }
 
     /* health */
@@ -292,6 +294,38 @@ export default async (req: Request, context: Context) => {
       }
       return json({ imported, skipped });
     }
+
+    /* training */
+    if (a === "ai" && b === "assist" && m === "POST") {
+      const text = str((await body(req)).text, 2000);
+      if (!text) return err("Say or type what you'd like.");
+      const [routines, recent] = await Promise.all([listDocs<Routine>(`u/${uid}/routine/`, 20), listDocs<Workout>(`u/${uid}/workout/`, 8)]);
+      const r = await assist(text, { date: ymdInTz(new Date(), p.tz), routines: routines.map((x) => x.title), recent: recent.map((x) => `${x.date} ${x.title}`), unit: "lb" });
+      if (r.intent === "note" && r.noteText) { const n: Note = { id: `${Date.now()}-${newId(4)}`, at: new Date().toISOString(), text: r.noteText }; await setJSON(noteKey(uid, n.id), n); return json({ ...r, note: n }); }
+      return json(r);
+    }
+    if (a === "workouts" && !b && m === "POST") {
+      const d = await body(req);
+      const prev = d.id ? await getJSON<Workout>(workoutKey(uid, str(d.id, 40))) : null;
+      const w = newWorkout(uid, { ...prev, ...d, createdAt: prev?.createdAt }, prev?.source ?? (["voice", "manual", "routine"].includes(d.source) ? d.source : "manual"));
+      if (w.status === "done" && !w.completedAt) w.completedAt = new Date().toISOString();
+      if (w.status === "active" && !w.startedAt) w.startedAt = new Date().toISOString();
+      await setJSON(workoutKey(uid, w.id), w);
+      return json({ workout: w });
+    }
+    if (a === "workouts" && b && m === "DELETE") {
+      const w = await getJSON<Workout>(workoutKey(uid, b));
+      if (w) { await setJSON(`u/${uid}/archive/workout-${b}`, w); await store().delete(workoutKey(uid, b)); }
+      return json({ ok: true });
+    }
+    if (a === "routines" && !b && m === "POST") {
+      const d = await body(req);
+      const r: Routine = { id: str(d.id, 40) || newId(), title: str(d.title, 80) || "Routine", exercises: cleanExercises(d.exercises).map((e) => ({ ...e, sets: e.sets.map((s) => ({ weight: s.weight, reps: s.reps })) })), createdAt: new Date().toISOString() };
+      if (!r.exercises.length) return err("A routine needs at least one exercise.");
+      await setJSON(routineKey(uid, r.id), r);
+      return json({ routine: r });
+    }
+    if (a === "routines" && b && m === "DELETE") { await store().delete(routineKey(uid, b)); return json({ ok: true }); }
 
     /* notes */
     if (a === "notes" && !b && m === "POST") {

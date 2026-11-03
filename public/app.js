@@ -29,6 +29,11 @@ const I = {
   notes: '<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   img: '<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/>',
+  train: '<path d="M6 7v10M18 7v10M3 9v6M21 9v6M6 12h12"/>',
+  more: '<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>',
+  mic: '<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4"/>',
+  check: '<path d="m5 12 5 5L20 7"/>',
+  back: '<path d="m15 18-6-6 6-6"/>',
   gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
 };
@@ -62,7 +67,8 @@ async function api(path, { method = "GET", body, headers = {}, raw } = {}) {
 
 /* ---------- state ---------- */
 const S = {
-  tab: store.get("lifeos.tab") || "today", tripSeg: "upcoming",
+  tab: (() => { const t = store.get("lifeos.tab") || "today"; return ["today", "health", "training", "trips", "more"].includes(t) ? t : "today"; })(), tripSeg: "upcoming", moreView: null,
+  workouts: [], routines: [],
   loaded: false, settings: null,
   days: new Map(), trips: [], notes: [],
   cal: { status: "idle", events: [], fetchedAt: null, error: null, connected: false },
@@ -201,7 +207,7 @@ async function showAuth(mode) {
 }
 
 /* ---------- render ---------- */
-const TABS = [["today", "Today", I.today], ["health", "Health", I.health], ["trips", "Trips", I.trips], ["cal", "Calendar", I.cal], ["notes", "Notes", I.notes]];
+const TABS = [["today", "Today", I.today], ["health", "Health", I.health], ["training", "Training", I.train], ["trips", "Trips", I.trips], ["more", "More", I.more]];
 function renderTabs() { $("#tabs").innerHTML = TABS.map(([k, l, p]) => `<button data-tab="${k}" ${S.tab === k ? 'aria-current="page"' : ""}><span class="pip">${icon(p)}</span>${l}</button>`).join(""); }
 function header(eyebrow, title, right = "") {
   $("#top").innerHTML = `<div style="min-width:0"><div class="eyebrow">${esc(eyebrow)}</div><h1 class="h1">${esc(title)}</h1></div><div style="display:flex;gap:8px;align-items:center">${right}<button class="iconbtn" data-act="settings" aria-label="Settings">${icon(I.gear, 20)}</button></div>`;
@@ -210,7 +216,8 @@ const sampleBanner = () => "";
 function render() {
   if (!S.loaded) return;
   renderTabs(); store.set("lifeos.tab", S.tab);
-  ({ today: vToday, health: vHealth, trips: vTrips, cal: vCal, notes: vNotes })[S.tab]();
+  if (S.tab === "more") return (S.moreView === "cal" ? vCal : S.moreView === "notes" ? vNotes : vMore)();
+  ({ today: vToday, health: vHealth, training: vTraining, trips: vTrips })[S.tab]();
 }
 
 function vToday() {
@@ -367,7 +374,7 @@ function vTrips() {
 /* Calendar */
 function vCal() {
   const c = S.cal;
-  header(`Times in ${TZ.replace(/_/g, " ") || "your time zone"}`, "Calendar", c.fetchedAt ? `<span class="chip">Updated ${esc(fmtTime(new Date(c.fetchedAt)))}</span>` : "");
+  header(`Times in ${TZ.replace(/_/g, " ") || "your time zone"}`, "Calendar", `<button class="iconbtn" data-more="none" aria-label="Back">${icon(I.back, 20)}</button>${c.fetchedAt ? `<span class="chip">Updated ${esc(fmtTime(new Date(c.fetchedAt)))}</span>` : ""}`);
   let html;
   if (!c.connected) html = `<section class="card"><div class="label">Google Calendar</div><p>Paste your calendar's secret iCal address in settings. LifeOS refreshes it every 5 minutes and shows times in your time zone.</p><button class="btn" data-act="settings">Connect Google Calendar</button></section>`;
   else if (!c.events.length && c.status === "loading") html = `<section class="card empty"><span class="spin"></span><div style="margin-top:8px">Loading your calendar…</div></section>`;
@@ -385,7 +392,7 @@ function vCal() {
 let draft = store.get("lifeos.draft") || "";
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 function vNotes() {
-  header("Voice & notes", "Notes");
+  header("Voice & notes", "Notes", `<button class="iconbtn" data-more="none" aria-label="Back">${icon(I.back, 20)}</button>`);
   $("#view").innerHTML = `
     <section class="card">
       <div class="label" style="margin-bottom:8px">New note</div>
@@ -416,6 +423,209 @@ function dictate() {
   } catch { rec = null; msg.textContent = "Dictation isn't available here. Use the mic on your keyboard."; }
 }
 
+/* ---------- More ---------- */
+function vMore() {
+  header("Everything else", "More");
+  const up = calEvents().filter((e) => e.e > new Date()).slice(0, 2);
+  $("#view").innerHTML = `
+    <button class="card morerow" data-more="cal"><span class="ic">${icon(I.cal)}</span><span><b>Calendar</b><span class="small muted">${S.cal.connected ? (up[0] ? `Next: ${esc(up[0].title)}` : "Nothing coming up") : "Not connected"}</span></span></button>
+    <button class="card morerow" data-more="notes"><span class="ic">${icon(I.notes)}</span><span><b>Notes</b><span class="small muted">${S.notes.length} saved · dictate or type</span></span></button>
+    <button class="card morerow" data-act="settings"><span class="ic">${icon(I.gear)}</span><span><b>Connections & settings</b><span class="small muted">Calendar, Oura, Apple Health, appearance</span></span></button>`;
+}
+
+/* ---------- Training ---------- */
+const MILES = [["SUV", 5000], ["Elephant", 12000], ["School bus", 21000], ["City bus", 30000], ["Semi truck", 40000], ["Fire truck", 50000], ["Tank", 62000], ["Blue whale", 75000], ["Space shuttle", 90000], ["Jumbo jet", 105000]];
+const fmtNum = (n) => Math.round(n).toLocaleString();
+function setVol(s) { return s.done && s.weight && s.reps ? s.weight * s.reps : 0; }
+function wVol(w) { return w.exercises.reduce((a, e) => a + e.sets.reduce((b, s) => b + setVol(s), 0), 0); }
+function weekStart(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; }
+function volumeStats() {
+  const done = S.workouts.filter((w) => w.status === "done");
+  const now = new Date(); const ws = weekStart(now); const lw = addDays(ws, -7); const ms = `${now.getFullYear()}-${pad(now.getMonth() + 1)}`; const ys = `${now.getFullYear()}-`;
+  const sum = (f) => done.filter(f).reduce((a, w) => a + wVol(w), 0);
+  return {
+    total: sum(() => true), week: sum((w) => parseYmd(w.date) >= ws), lastWeek: sum((w) => parseYmd(w.date) >= lw && parseYmd(w.date) < ws),
+    month: sum((w) => w.date.startsWith(ms)), ytd: sum((w) => w.date.startsWith(ys)), sessions: done.length,
+  };
+}
+function vTraining() {
+  const v = volumeStats(); const today = todayStr();
+  header(new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" }), "Training", `<button class="btn volt" data-act="talk" style="height:38px">${icon(I.mic, 18)} Talk</button>`);
+  const next = MILES.find(([, n]) => n > v.month); const prevMile = [...MILES].reverse().find(([, n]) => n <= v.month);
+  const pct = next ? Math.min(100, ((v.month - (prevMile?.[1] || 0)) / (next[1] - (prevMile?.[1] || 0))) * 100) : 100;
+  const planned = S.workouts.filter((w) => w.status !== "done" && w.date >= today).sort((a, b) => (a.date < b.date ? -1 : 1));
+  const active = S.workouts.find((w) => w.status === "active");
+  const recent = S.workouts.filter((w) => w.status === "done").slice(0, 6);
+  const wkDelta = v.lastWeek ? Math.round(((v.week - v.lastWeek) / v.lastWeek) * 100) : null;
+  $("#view").innerHTML = `
+    <section class="card vol">
+      <div class="label" style="color:var(--volt-text)">Lifetime volume</div>
+      <div class="num big">${fmtNum(v.total)}<span class="unit">lb</span></div>
+      <div class="small muted">${v.sessions ? `${fmtNum(v.total)} lb across ${v.sessions} logged session${v.sessions === 1 ? "" : "s"}.` : "Every finished workout adds its weight × reps here."}</div>
+      <div class="trio3">
+        <div><div class="label">This week</div><div class="num">${fmtNum(v.week)}<span class="unit">lb</span></div><div class="from">${wkDelta === null ? "" : `${wkDelta >= 0 ? "+" : ""}${wkDelta}% vs last week`}</div></div>
+        <div><div class="label">This month</div><div class="num">${fmtNum(v.month)}<span class="unit">lb</span></div><div class="from">${MILES.filter(([, n]) => n <= v.month).length} of ${MILES.length} milestones</div></div>
+        <div><div class="label">${new Date().getFullYear()} YTD</div><div class="num">${fmtNum(v.ytd)}<span class="unit">lb</span></div></div>
+      </div>
+      <div class="milehead"><span class="label">${new Date().toLocaleDateString(undefined, { month: "short" })} milestone${next ? ` · next: ${next[0]}` : " · all done"}</span><span class="small" style="color:var(--volt-text);font-weight:600">${next ? `${fmtNum(next[1] - v.month)} lb to go` : ""}</span></div>
+      <div class="progress"><i style="width:${pct}%"></i></div>
+      <div class="miles">${MILES.map(([n, w]) => `<div class="mile ${w <= v.month ? "hit" : ""}"><b>${esc(n)}</b><span>${fmtNum(w)} lb</span></div>`).join("")}</div>
+      <div class="small muted" style="margin-top:8px">Milestones reset on the 1st. Equivalents are approximate.</div>
+    </section>
+    <button class="card talk" data-act="talk"><span class="ic">${icon(I.mic)}</span><span><b>Talk to LifeOS</b><span class="small muted">Build a plan in one sentence: your time, equipment and focus. Or say what you already did and it gets logged.</span></span></button>
+    <div class="sec-h"><h2>${active ? "In progress" : "Today's workout"}</h2><button class="link" data-act="newworkout">Log manually</button></div>
+    ${active ? workoutRow(active) : planned.length ? planned.slice(0, 3).map(workoutRow).join("") : `<section class="card empty">No plan yet. Tap Talk and say what you want to do.</section>`}
+    <div class="sec-h"><h2>Completed</h2><span class="small muted">${S.workouts.filter((w) => w.status === "done").length}</span></div>
+    ${recent.length ? recent.map(workoutRow).join("") : `<section class="card empty">Finished workouts show here with their volume.</section>`}
+    <div class="sec-h"><h2>Routines</h2><span class="small muted">${S.routines.length}</span></div>
+    ${S.routines.length ? S.routines.map((r) => `<section class="card"><div class="small" style="color:var(--volt-text);font-weight:600">${r.exercises.length} exercise${r.exercises.length === 1 ? "" : "s"}</div><h3 style="margin:4px 0 6px;font-size:19px">${esc(r.title)}</h3><div class="small muted">${esc(r.exercises.slice(0, 4).map((e) => `${e.name} · ${e.sets.length} × ${e.targetReps || (e.sets[0]?.reps ?? "")}`).join(" · "))}</div><div class="actions"><button class="btn volt" data-routine-start="${esc(r.id)}">Start</button><button class="btn ghost" data-routine-del="${esc(r.id)}">Delete</button></div></section>`).join("") : `<section class="card empty">Save any workout as a routine to repeat it in one tap.</section>`}`;
+}
+function workoutRow(w) {
+  const n = w.exercises.length; const setsDone = w.exercises.reduce((a, e) => a + e.sets.filter((s) => s.done).length, 0), sets = w.exercises.reduce((a, e) => a + e.sets.length, 0);
+  const when = w.date === todayStr() ? "Today" : fmtDay(w.date);
+  return `<button class="card wrow" data-session="${esc(w.id)}"><div style="min-width:0"><div class="small" style="color:var(--volt-text);font-weight:600">${esc(when)} · ${n} exercise${n === 1 ? "" : "s"}${w.status === "done" ? ` · ${fmtNum(wVol(w))} lb` : sets ? ` · ${setsDone}/${sets} sets` : ""}</div><h3 style="margin:4px 0 2px;font-size:19px">${esc(w.title)}</h3><div class="small muted">${esc(w.exercises.slice(0, 3).map((e) => e.name).join(" · "))}${n > 3 ? " · …" : ""}</div></div><span class="chip ${w.status === "done" ? "ok" : w.status === "active" ? "" : "wait"}">${w.status === "done" ? "Done" : w.status === "active" ? "Live" : "Planned"}</span></button>`;
+}
+
+/* Talk to LifeOS */
+let listenRec = null;
+function listen(box, onState) {
+  const SRr = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SRr) { onState("none"); return null; }
+  if (listenRec) { listenRec.stop(); return null; }
+  try {
+    const r = new SRr(); r.continuous = true; r.interimResults = true; r.lang = navigator.language || "en-US";
+    const base = box.value ? box.value.trimEnd() + " " : "";
+    r.onresult = (ev) => { let t = ""; for (const x of ev.results) t += x[0].transcript; box.value = base + t; box.dispatchEvent(new Event("input")); };
+    r.onerror = (ev) => onState(ev.error === "not-allowed" || ev.error === "service-not-allowed" ? "blocked" : "error");
+    r.onend = () => { listenRec = null; onState("stopped"); };
+    r.start(); listenRec = r; onState("listening"); return r;
+  } catch { listenRec = null; onState("error"); return null; }
+}
+function talkSheet(prefill = "") {
+  const hasSR = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+  sheet(`<h2>Talk to LifeOS</h2><p class="muted">Say what you want to do, or what you did. Examples: "45 minutes, dumbbells, chest and biceps." "Did 5 by 5 squats at 225 and 3 sets of 10 pull-ups."</p>
+    <textarea class="note" id="talkBox" placeholder="${hasSR ? "Tap the mic and talk, or type." : "Tap here, then the mic on your keyboard."}">${esc(prefill)}</textarea>
+    <div class="actions">${hasSR ? `<button class="btn" id="talkMic">${icon(I.mic, 18)} Talk</button>` : ""}<button class="btn volt" id="talkGo" style="flex:1" ${prefill.trim() ? "" : "disabled"}>Go</button></div>
+    <div class="small muted" id="talkMsg" style="margin-top:8px">${hasSR ? "The transcript shows here first so you can fix it before sending." : ""}</div>
+    <div id="talkReply"></div>`, (el) => {
+    const box = el.querySelector("#talkBox"), go = el.querySelector("#talkGo"), msg = el.querySelector("#talkMsg"), mic = el.querySelector("#talkMic");
+    box.addEventListener("input", () => (go.disabled = !box.value.trim()));
+    if (mic) mic.onclick = () => listen(box, (st) => {
+      if (st === "listening") { mic.classList.add("rec"); mic.textContent = "Stop"; msg.textContent = "Listening…"; }
+      else { mic.classList.remove("rec"); mic.innerHTML = `${icon(I.mic, 18)} Talk`; msg.textContent = st === "blocked" ? "Microphone is off for this site. Allow it in Settings, or use the mic on your keyboard." : st === "error" ? "Dictation stopped. Tap Talk to continue." : "Check the transcript, then Go."; }
+    });
+    go.onclick = async () => {
+      listenRec?.stop(); const text = box.value.trim(); if (!text) return;
+      go.disabled = true; go.innerHTML = `<span class="spin"></span> Thinking`;
+      try {
+        const r = await api("ai/assist", { method: "POST", body: { text } });
+        if (r.intent === "plan_workout" && r.workout) reviewSheet({ ...r.workout, date: todayStr(), status: "planned", source: "voice" }, r.reply);
+        else if (r.intent === "log_workout" && r.workout) reviewSheet({ ...r.workout, date: todayStr(), status: "done", source: "voice" }, r.reply);
+        else if (r.intent === "note" && r.note) { S.notes.unshift(r.note); closeSheet(); toast("Saved to Notes."); }
+        else { el.querySelector("#talkReply").innerHTML = `<p class="summary">${esc(r.reply || "Didn't catch that. Try once more.")}</p>`; go.disabled = false; go.textContent = "Go"; }
+      } catch (e) { msg.textContent = e.message; go.disabled = false; go.textContent = "Go"; }
+    };
+    if (!prefill) box.focus();
+  });
+}
+/* Review a drafted workout before saving */
+function reviewSheet(w, reply) {
+  const W = JSON.parse(JSON.stringify(w)); W.exercises = W.exercises || [];
+  const draw = () => {
+    const el = $("#reviewBody"); if (!el) return;
+    el.innerHTML = W.exercises.map((e, i) => `<div class="ex"><div class="exh"><input class="exname" data-ex="${i}" value="${esc(e.name)}" aria-label="Exercise"><button class="link small" data-exdel="${i}">Remove</button></div>
+      <div class="small muted">Target reps <input class="mini" data-target="${i}" value="${esc(e.targetReps || "")}" placeholder="8-10"> · ${e.sets.length} set${e.sets.length === 1 ? "" : "s"}
+      <button class="link small" data-setadd="${i}">+ set</button>${e.sets.length ? ` <button class="link small" data-setrm="${i}">− set</button>` : ""}</div>
+      ${W.status === "done" ? `<div class="sets">${e.sets.map((s, j) => `<div class="setrow"><span class="n">${j + 1}</span><input type="number" inputmode="decimal" data-w="${i}:${j}" value="${s.weight ?? ""}" placeholder="0"><span class="u">lb</span><input type="number" inputmode="numeric" data-r="${i}:${j}" value="${s.reps ?? ""}" placeholder="reps"></div>`).join("")}</div>` : ""}</div>`).join("") + `<button class="link" id="exAdd" style="margin-top:8px">+ Add exercise</button>`;
+  };
+  sheet(`<h2>${W.status === "done" ? "Log this?" : "Your plan"}</h2>${reply ? `<p class="muted">${esc(reply)}</p>` : ""}
+    <div class="field"><label class="label" for="rvTitle">Name</label><input id="rvTitle" value="${esc(W.title)}"></div>
+    ${W.durationMin ? `<div class="small muted" style="margin-top:6px">About ${W.durationMin} min</div>` : ""}
+    <div id="reviewBody" style="margin-top:12px"></div>
+    <div class="err" id="rvErr"></div>
+    <div class="actions">${W.status === "done" ? `<button class="btn volt wide" id="rvSave">Save to completed</button>` : `<button class="btn volt" id="rvStart" style="flex:1">Start now</button><button class="btn" id="rvSave">Save for today</button>`}</div>`, (el) => {
+    draw();
+    el.addEventListener("input", (e) => {
+      const t = e.target; const [i, j] = (t.dataset.w || t.dataset.r || "").split(":").map(Number);
+      if (t.dataset.ex != null) W.exercises[+t.dataset.ex].name = t.value;
+      else if (t.dataset.target != null) W.exercises[+t.dataset.target].targetReps = t.value;
+      else if (t.dataset.w) W.exercises[i].sets[j].weight = t.value === "" ? null : +t.value;
+      else if (t.dataset.r) W.exercises[i].sets[j].reps = t.value === "" ? null : +t.value;
+    });
+    el.addEventListener("click", (e) => {
+      const b = e.target.closest("button"); if (!b) return;
+      if (b.dataset.exdel != null) { W.exercises.splice(+b.dataset.exdel, 1); draw(); }
+      else if (b.dataset.setadd != null) { const ex = W.exercises[+b.dataset.setadd]; const last = ex.sets.at(-1); ex.sets.push({ weight: last?.weight ?? null, reps: last?.reps ?? null, done: W.status === "done" }); draw(); }
+      else if (b.dataset.setrm != null) { W.exercises[+b.dataset.setrm].sets.pop(); draw(); }
+      else if (b.id === "exAdd") { W.exercises.push({ name: "", targetReps: "", sets: [{ weight: null, reps: null, done: W.status === "done" }, { weight: null, reps: null, done: W.status === "done" }, { weight: null, reps: null, done: W.status === "done" }] }); draw(); el.querySelector(`[data-ex="${W.exercises.length - 1}"]`)?.focus(); }
+    });
+    const save = async (start) => {
+      W.title = el.querySelector("#rvTitle").value.trim() || W.title;
+      W.exercises = W.exercises.filter((x) => x.name.trim());
+      if (!W.exercises.length) { el.querySelector("#rvErr").textContent = "Add at least one exercise."; return; }
+      if (start) W.status = "active";
+      try { const r = await api("workouts", { method: "POST", body: W }); upsertWorkout(r.workout); render(); if (start) sessionSheet(r.workout.id); else { closeSheet(); toast(W.status === "done" ? `Logged. ${fmtNum(wVol(r.workout))} lb.` : "Plan saved for today."); } }
+      catch (x) { el.querySelector("#rvErr").textContent = x.message; }
+    };
+    el.querySelector("#rvSave").onclick = () => save(false);
+    el.querySelector("#rvStart")?.addEventListener("click", () => save(true));
+  });
+}
+function upsertWorkout(w) { const i = S.workouts.findIndex((x) => x.id === w.id); if (i >= 0) S.workouts[i] = w; else S.workouts.unshift(w); S.workouts.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.createdAt < b.createdAt ? 1 : -1)); }
+
+/* Live session: log sets */
+function sessionSheet(id) {
+  const w0 = S.workouts.find((x) => x.id === id); if (!w0) return;
+  const W = JSON.parse(JSON.stringify(w0)); if (W.status === "planned") { W.status = "active"; W.startedAt = new Date().toISOString(); }
+  let saveT; const persist = () => { clearTimeout(saveT); saveT = setTimeout(async () => { try { const r = await api("workouts", { method: "POST", body: W }); upsertWorkout(r.workout); } catch {} }, 600); };
+  const done = () => W.exercises.reduce((a, e) => a + e.sets.filter((s) => s.done).length, 0), total = () => W.exercises.reduce((a, e) => a + e.sets.length, 0);
+  const draw = () => {
+    const el = $("#sessBody"); if (!el) return;
+    $("#sessPct").textContent = total() ? `${Math.round((done() / total()) * 100)}%` : "0%";
+    $("#sessVol").textContent = `${fmtNum(wVol(W))} lb`;
+    el.innerHTML = W.exercises.map((e, i) => `<div class="ex"><div class="exh"><button class="exdone ${e.sets.length && e.sets.every((s) => s.done) ? "on" : ""}" data-exall="${i}" aria-label="Mark all sets">${icon(I.check, 16)}</button><input class="exname" data-ex="${i}" value="${esc(e.name)}"><button class="link small" data-exdel="${i}">Remove</button></div>
+      <div class="small muted">${e.sets.filter((s) => s.done).length} of ${e.sets.length} sets${e.targetReps ? ` · target ${esc(e.targetReps)} reps` : ""}</div>
+      <div class="sets"><div class="setrow head"><span>Set</span><span>Weight</span><span></span><span>Reps</span></div>
+      ${e.sets.map((s, j) => `<div class="setrow ${s.done ? "done" : ""}"><button class="n" data-set="${i}:${j}">${j + 1}</button><input type="number" inputmode="decimal" data-w="${i}:${j}" value="${s.weight ?? ""}" placeholder="0"><span class="u">lb</span><input type="number" inputmode="numeric" data-r="${i}:${j}" value="${s.reps ?? ""}" placeholder="${esc(e.targetReps || "reps")}"></div>`).join("")}</div>
+      <div class="actions" style="margin-top:8px"><button class="btn ghost" data-setadd="${i}" style="height:36px">+ Add set</button>${e.sets.length ? `<button class="link" data-setrm="${i}">Remove last set</button>` : ""}</div></div>`).join("") + `<button class="link" id="exAdd" style="margin-top:8px">+ Add exercise</button>`;
+  };
+  sheet(`<div class="sessh"><div><div class="small" style="color:var(--volt-text);font-weight:600"><span id="sessVol"></span> · ${esc(W.date === todayStr() ? "Today" : fmtDay(W.date))}</div><input id="sessTitle" class="h2in" value="${esc(W.title)}"></div><div class="num" id="sessPct" style="font-size:34px;color:var(--volt-text)"></div></div>
+    ${W.note ? `<p class="small muted">${esc(W.note)}</p>` : ""}
+    <div id="sessBody" style="margin-top:8px"></div>
+    <div class="actions" style="margin-top:16px">${W.status !== "done" ? `<button class="btn volt wide" id="sessFinish">Finish workout</button>` : `<button class="btn wide" id="sessReopen">Reopen</button>`}<button class="btn ghost" id="sessRoutine">Save as routine</button><button class="btn ghost" id="sessDelete">Delete</button></div>`, (el) => {
+    draw(); persist();
+    el.querySelector("#sessTitle").addEventListener("input", (e) => { W.title = e.target.value; persist(); });
+    el.addEventListener("input", (e) => {
+      const t = e.target; if (!(t.dataset.w || t.dataset.r || t.dataset.ex != null)) return;
+      if (t.dataset.ex != null) W.exercises[+t.dataset.ex].name = t.value;
+      else { const [i, j] = (t.dataset.w || t.dataset.r).split(":").map(Number); const s = W.exercises[i].sets[j]; if (t.dataset.w) s.weight = t.value === "" ? null : +t.value; else s.reps = t.value === "" ? null : +t.value; if (s.weight && s.reps) s.done = true; }
+      $("#sessVol").textContent = `${fmtNum(wVol(W))} lb`; $("#sessPct").textContent = total() ? `${Math.round((done() / total()) * 100)}%` : "0%"; persist();
+    });
+    el.addEventListener("click", async (e) => {
+      const b = e.target.closest("button"); if (!b) return;
+      if (b.dataset.set) { const [i, j] = b.dataset.set.split(":").map(Number); const s = W.exercises[i].sets[j]; s.done = !s.done; if (s.done) { const prev = W.exercises[i].sets[j - 1]; if (s.reps == null) s.reps = prev?.reps ?? (parseInt(W.exercises[i].targetReps) || null); if (s.weight == null && prev?.weight != null) s.weight = prev.weight; } draw(); persist(); }
+      else if (b.dataset.exall != null) { const ex = W.exercises[+b.dataset.exall]; const all = ex.sets.every((s) => s.done); ex.sets.forEach((s, j) => { s.done = !all; if (!all && s.reps == null) s.reps = ex.sets[j - 1]?.reps ?? (parseInt(ex.targetReps) || null); }); draw(); persist(); }
+      else if (b.dataset.setadd != null) { const ex = W.exercises[+b.dataset.setadd]; const last = ex.sets.at(-1); ex.sets.push({ weight: last?.weight ?? null, reps: last?.reps ?? null, done: false }); draw(); persist(); }
+      else if (b.dataset.setrm != null) { W.exercises[+b.dataset.setrm].sets.pop(); draw(); persist(); }
+      else if (b.dataset.exdel != null) { W.exercises.splice(+b.dataset.exdel, 1); draw(); persist(); }
+      else if (b.id === "exAdd") { W.exercises.push({ name: "", targetReps: "", sets: [{ weight: null, reps: null }, { weight: null, reps: null }, { weight: null, reps: null }] }); draw(); el.querySelector(`[data-ex="${W.exercises.length - 1}"]`)?.focus(); }
+      else if (b.id === "sessFinish") {
+        clearTimeout(saveT); W.status = "done"; W.completedAt = new Date().toISOString();
+        if (W.startedAt) W.durationMin = Math.max(1, Math.round((Date.now() - Date.parse(W.startedAt)) / 60000));
+        try { const r = await api("workouts", { method: "POST", body: W }); upsertWorkout(r.workout); closeSheet(); render(); toast(`Workout done. ${fmtNum(wVol(r.workout))} lb logged.`); } catch (x) { toast(esc(x.message)); }
+      }
+      else if (b.id === "sessReopen") { W.status = "active"; persist(); closeSheet(); render(); sessionSheet(W.id); }
+      else if (b.id === "sessRoutine") {
+        try { const r = await api("routines", { method: "POST", body: { title: W.title, exercises: W.exercises } }); S.routines.push(r.routine); render(); toast("Saved as a routine."); } catch (x) { toast(esc(x.message)); }
+      }
+      else if (b.id === "sessDelete") {
+        if (!b.dataset.armed) { b.dataset.armed = "1"; b.textContent = "Tap again to delete"; return; }
+        clearTimeout(saveT); try { await api(`workouts/${W.id}`, { method: "DELETE", body: {} }); S.workouts = S.workouts.filter((x) => x.id !== W.id); closeSheet(); render(); toast("Workout deleted."); } catch (x) { toast(esc(x.message)); }
+      }
+    });
+  });
+}
+
 /* ---------- sheets & toasts ---------- */
 function sheet(html, onMount) {
   closeSheet();
@@ -442,17 +652,17 @@ async function loadState() {
   const d = await api(`state?tz=${encodeURIComponent(TZ)}&since=${since}`);
   S.settings = d.settings;
   S.days = new Map(d.days.map((x) => [x.date, x]));
-  S.trips = d.trips; S.notes = d.notes;
+  S.trips = d.trips; S.notes = d.notes; S.workouts = d.workouts || []; S.routines = d.routines || [];
   S.cal.connected = !!d.settings.calendar?.connected;
   S.loaded = true;
 }
 let calTimer;
 async function loadCalendar(force = false) {
   if (!S.cal.connected) return;
-  S.cal.status = "loading"; if (S.tab === "cal" || S.tab === "today") render();
+  S.cal.status = "loading"; if (S.tab === "today" || (S.tab === "more" && S.moreView === "cal")) render();
   try { const d = await api(`calendar${force ? "?force=1" : ""}`); S.cal = { ...S.cal, status: "ok", events: d.events || [], fetchedAt: d.fetchedAt || null, error: d.error || null, connected: d.connected }; }
   catch (e) { S.cal = { ...S.cal, status: "error", error: e.message }; }
-  if (["cal", "today", "trips"].includes(S.tab)) render();
+  if (["today", "trips"].includes(S.tab) || (S.tab === "more" && S.moreView === "cal")) render();
 }
 function setDay(day) { if (day) S.days.set(day.date, day); }
 
@@ -770,10 +980,21 @@ function settingsSheet(onboarding = false) {
 
 /* ---------- events ---------- */
 document.addEventListener("click", async (e) => {
-  const tab = e.target.closest("[data-tab]"); if (tab) { S.tab = tab.dataset.tab; render(); scrollTo({ top: 0 }); return; }
-  const go = e.target.closest("[data-go]"); if (go) { S.tab = go.dataset.go; render(); scrollTo({ top: 0 }); return; }
+  const tab = e.target.closest("[data-tab]"); if (tab) { S.tab = tab.dataset.tab; if (S.tab === "more") S.moreView = null; render(); scrollTo({ top: 0 }); return; }
+  const go = e.target.closest("[data-go]"); if (go) { const g = go.dataset.go; if (g === "cal" || g === "notes") { S.tab = "more"; S.moreView = g; } else { S.tab = g; } render(); scrollTo({ top: 0 }); return; }
+  const mv = e.target.closest("[data-more]"); if (mv) { S.moreView = mv.dataset.more === "none" ? null : mv.dataset.more; render(); scrollTo({ top: 0 }); return; }
   const seg = e.target.closest("[data-seg]"); if (seg) { S.tripSeg = seg.dataset.seg; render(); return; }
   const tr = e.target.closest("[data-trip]"); if (tr) { tripDetail(tr.dataset.trip); return; }
+  const ss = e.target.closest("[data-session]"); if (ss) { sessionSheet(ss.dataset.session); return; }
+  const rs = e.target.closest("[data-routine-start]");
+  if (rs) {
+    const r = S.routines.find((x) => x.id === rs.dataset.routineStart); if (!r) return;
+    try { const res = await api("workouts", { method: "POST", body: { title: r.title, date: todayStr(), status: "active", source: "routine", exercises: r.exercises.map((x) => ({ ...x, sets: x.sets.map((s) => ({ weight: s.weight, reps: s.reps, done: false })) })) } }); upsertWorkout(res.workout); render(); sessionSheet(res.workout.id); }
+    catch (x) { toast(esc(x.message)); }
+    return;
+  }
+  const rd = e.target.closest("[data-routine-del]");
+  if (rd) { if (!rd.dataset.armed) { rd.dataset.armed = "1"; rd.textContent = "Tap again to delete"; return; } try { await api(`routines/${rd.dataset.routineDel}`, { method: "DELETE", body: {} }); S.routines = S.routines.filter((x) => x.id !== rd.dataset.routineDel); render(); } catch (x) { toast(esc(x.message)); } return; }
   const mk = e.target.closest("[data-mkcard]");
   if (mk) {
     const ev = calEvents().find((x) => x.id === mk.dataset.mkcard); if (!ev) return;
@@ -790,6 +1011,8 @@ document.addEventListener("click", async (e) => {
   else if (act === "newtrip") tripForm();
   else if (act === "importcards") $("#fileCards").click();
   else if (act === "synccards") syncCards();
+  else if (act === "talk") talkSheet();
+  else if (act === "newworkout") reviewSheet({ title: "Workout", date: todayStr(), status: "done", source: "manual", exercises: [{ name: "", targetReps: "", sets: [{ weight: null, reps: null, done: true }, { weight: null, reps: null, done: true }, { weight: null, reps: null, done: true }] }] }, "Fill in what you did and save it.");
   else if (act === "ourasync") {
     a.disabled = true; toast(spinner("Syncing Oura…"));
     try { const r = await api("sync/oura", { method: "POST", body: {} }); S.settings = r.settings; await loadState(); render(); if ($("#scrim")) settingsSheet(); toast(`Oura synced. ${r.sync.days} day${r.sync.days === 1 ? "" : "s"} updated.`); }
