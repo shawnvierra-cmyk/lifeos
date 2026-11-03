@@ -1,7 +1,7 @@
 // Health data: per-day documents that only ever add to history, Oura v2 sync,
 // Apple Health row mapping, and screenshot reading with Claude.
 import Anthropic from "@anthropic-ai/sdk";
-import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
+import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { addDaysYmd, decrypt, getJSON, isYmd, setJSON, store, type Profile, saveProfile, ymdInTz } from "./core.mts";
 
@@ -157,22 +157,30 @@ const Extract = z.object({
   }),
 });
 
+/** Claude is reachable either through a key set in Netlify or through Netlify's AI Gateway,
+ *  which injects ANTHROPIC_API_KEY and ANTHROPIC_BASE_URL into functions at runtime. */
+const envGet = (k: string) => (globalThis as any).Netlify?.env?.get(k) ?? process.env[k];
+export function aiAvailable() { return !!envGet("ANTHROPIC_API_KEY"); }
+export function aiSource() { return !aiAvailable() ? "none" : envGet("ANTHROPIC_BASE_URL") && !String(envGet("ANTHROPIC_API_KEY")).startsWith("sk-ant-") ? "netlify-gateway" : "api-key"; }
+function claude(timeout: number, maxRetries: number) {
+  // No explicit apiKey: the SDK reads ANTHROPIC_API_KEY and ANTHROPIC_BASE_URL from the environment.
+  const apiKey = envGet("ANTHROPIC_API_KEY"), baseURL = envGet("ANTHROPIC_BASE_URL");
+  return new Anthropic({ ...(apiKey ? { apiKey } : {}), ...(baseURL ? { baseURL } : {}), timeout, maxRetries });
+}
+
 export async function readScreenshot(image: Buffer, mediaType: string, todayYmd: string) {
-  const apiKey = (globalThis as any).Netlify?.env?.get("ANTHROPIC_API_KEY") ?? process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw Object.assign(new Error("Screenshot reading needs ANTHROPIC_API_KEY in Netlify."), { code: 503 });
-  const client = new Anthropic({ apiKey, timeout: 50_000, maxRetries: 1 });
+  if (!aiAvailable()) throw Object.assign(new Error("Screenshot reading isn't switched on for this site yet."), { code: 503 });
+  const client = claude(50_000, 1);
   const weekday = new Date(todayYmd + "T12:00:00Z").toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" });
   const prompt = `This is one screenshot from a health app. Record only what it visibly shows.
 Today is ${weekday} ${todayYmd} in the user's time zone. "Today" means ${todayYmd}; "Yesterday" means ${addDaysYmd(todayYmd, -1)}. A date without a year is the most recent such date on or before today. Sleep and readiness for "last night" belong to the date the person woke up.
 Identify the app: oura (Oura), eight (Eight Sleep), apple (Apple Health, Fitness or Watch), body (a smart scale or body-composition app), or unknown.
 Copy only numbers printed on the screen. Never estimate, infer or calculate a value that is not shown; use null for anything not visible.
 Durations go in minutes (7h 32m = 452). hrv is heart rate variability in ms; hrvAvg is the user's average HRV if the screen shows one. bioAge is a biological age; metabolicAge is a scale's metabolic age. bodyFat is a percentage. muscle is skeletal muscle mass.`;
-  const res = await client.beta.messages.parse({
+  const res = await client.messages.parse({
     model: "claude-opus-5-5",
     max_tokens: 8000,
-    betas: ["server-side-fallback-2026-07-01"],
-    fallbacks: "default",
-    output_config: { effort: "low", format: betaZodOutputFormat(Extract) },
+    output_config: { effort: "low", format: zodOutputFormat(Extract) },
     messages: [{ role: "user", content: [
       { type: "image", source: { type: "base64", media_type: mediaType as "image/jpeg", data: image.toString("base64") } },
       { type: "text", text: prompt },
@@ -193,14 +201,12 @@ Durations go in minutes (7h 32m = 452). hrv is heart rate variability in ms; hrv
 
 /** Pick the vertical focus point (0-100) that keeps the main subject's head in a wide crop. */
 export async function faceFocus(image: Buffer, mediaType: string): Promise<number | null> {
-  const apiKey = (globalThis as any).Netlify?.env?.get("ANTHROPIC_API_KEY") ?? process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return null;
+  if (!aiAvailable()) return null;
   try {
-    const client = new Anthropic({ apiKey, timeout: 30_000, maxRetries: 0 });
-    const res = await client.beta.messages.parse({
+    const client = claude(30_000, 0);
+    const res = await client.messages.parse({
       model: "claude-opus-5-5", max_tokens: 2000,
-      betas: ["server-side-fallback-2026-07-01"], fallbacks: "default",
-      output_config: { effort: "low", format: betaZodOutputFormat(z.object({ focusY: z.number().describe("0 = top edge, 100 = bottom edge") })) },
+      output_config: { effort: "low", format: zodOutputFormat(z.object({ focusY: z.number().describe("0 = top edge, 100 = bottom edge") })) },
       messages: [{ role: "user", content: [
         { type: "image", source: { type: "base64", media_type: mediaType as "image/jpeg", data: image.toString("base64") } },
         { type: "text", text: "This photo will be shown as a wide 16:10 header and cropped top and bottom. Give the vertical position, as a percentage of image height, of the center of the main person's face (or of the main subject if there is no person), so the whole head stays in frame." },

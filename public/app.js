@@ -677,6 +677,7 @@ function settingsSheet() {
     <div class="field"><span class="label">Header: Authorization</span><code class="key">Bearer ${esc(st.ingestKey || "")}</code></div>
     <div class="small muted" style="margin-top:6px">JSON body: <code>{"date":"2026-11-03","steps":9120,"sleep_minutes":452,"resting_hr":55,"hrv":62,"heart_rate":71}</code>. You can also import the full Health export (export.xml) from the Health tab.</div>
     <div class="actions"><button class="btn ghost" id="copyKey">Copy key</button><button class="btn ghost" id="newKey">New key</button></div>
+    <div class="conn"><div><h4>Screenshot reading</h4><div class="small muted">${st.ai ? "On. Oura, Eight Sleep, Health and scale screenshots are read by Claude and logged to the right day." : "Off. Needs an Anthropic key or Netlify AI in the project settings."}</div></div><span class="chip ${st.ai ? "ok" : "wait"}">${st.ai ? "On" : "Off"}</span></div>
     <div class="conn"><div><h4>Eight Sleep</h4><div class="small muted">Eight Sleep has no public API. Drop screenshots and LifeOS logs score, HRV, deep sleep and bio age.</div></div></div>
     <div class="err" id="sErr"></div>
     <div class="actions" style="margin-top:22px"><button class="btn ghost wide" id="signOut">Sign out</button></div>`, (el) => {

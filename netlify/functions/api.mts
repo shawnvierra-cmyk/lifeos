@@ -2,11 +2,12 @@
 // endpoint requires a signed session cookie, and every read and write is scoped
 // to that user's own keys (u/<uid>/...), which keeps tenants apart.
 import type { Config, Context } from "@netlify/functions";
+import Anthropic from "@anthropic-ai/sdk";
 import {
   clearSessionCookie, emailKey, encrypt, env_, err, getJSON, getProfile, hashPassword, isYmd, json, makeSessionCookie,
   newId, saveProfile, sessionUid, setJSON, store, verifyPassword, ymdInTz, type Profile,
 } from "../lib/core.mts";
-import { checkOuraToken, ingestAppleRows, listDays, logDay, putDay, readScreenshot, faceFocus, SOURCES, cleanFields, type Source, type Day } from "../lib/health.mts";
+import { checkOuraToken, ingestAppleRows, listDays, logDay, putDay, readScreenshot, faceFocus, aiAvailable, aiSource, SOURCES, cleanFields, type Source, type Day } from "../lib/health.mts";
 import { calendarEvents, validIcsUrl } from "../lib/calendar.mts";
 import { deleteMedia, getMeta, putChunk, putWhole, readWhole, serveMedia } from "../lib/media.mts";
 import { downloadCommons, searchCommons } from "../lib/photos.mts";
@@ -41,6 +42,7 @@ function publicSettings(p: Profile) {
     oura: p.oura ? { connected: true, lastSync: p.oura.lastSync ?? null, lastError: p.oura.lastError ?? null } : { connected: false },
     calendar: { connected: !!p.ics },
     ingestKey: p.ingestKey ?? null,
+    ai: aiAvailable(),
   };
 }
 
@@ -79,7 +81,14 @@ export default async (req: Request, context: Context) => {
     }
     if (a === "auth" && b === "status" && m === "GET") {
       const owner = await getJSON("system/owner");
+      console.log(`LifeOS status: ai=${aiSource()} owner=${owner ? "yes" : "none"}`);
       return json({ firstUser: !owner, signupsOpen: !owner || !!env_("INVITE_CODE") });
+    }
+    if (a === "health" && m === "GET") {
+      let storage = false;
+      try { await store().list({ prefix: "system/" }); storage = true; } catch {}
+      console.log(`LifeOS health: ai=${aiSource()} storage=${storage}`);
+      return json({ ok: storage, ai: aiAvailable(), aiSource: aiSource(), storage, time: new Date().toISOString() });
     }
     if (a === "auth" && b === "logout" && m === "POST") return json({ ok: true }, 200, { "set-cookie": clearSessionCookie() });
 
@@ -262,6 +271,9 @@ export default async (req: Request, context: Context) => {
     return err("Not found.", 404);
   } catch (e: any) {
     console.error(e);
+    if (e instanceof Anthropic.AuthenticationError || e instanceof Anthropic.PermissionDeniedError) return err("Screenshot reading isn't switched on for this site yet.", 503);
+    if (e instanceof Anthropic.RateLimitError) return err("Too many screenshots at once. Try again in a minute.", 429);
+    if (e instanceof Anthropic.APIError) return err("The screenshot reader is unavailable right now. Try again shortly.", 503);
     return err(e?.message || "Something went wrong.", e?.code === 503 ? 503 : e?.code === 401 ? 400 : 500);
   }
 };
