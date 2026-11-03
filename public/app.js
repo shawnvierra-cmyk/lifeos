@@ -22,6 +22,8 @@ const mediaUrl = (id) => `/api/media/${encodeURIComponent(id)}`;
 const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch {} }, del(k) { try { localStorage.removeItem(k); } catch {} } };
 const icon = (p, s = 24) => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
 const I = {
+  google: `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.7-2.4 3.6v3h3.9c2.3-2.1 3.5-5.2 3.5-8.8z"/><path fill="#34A853" d="M12 24c3.2 0 6-1.1 8-2.9l-3.9-3c-1.1.7-2.5 1.2-4.1 1.2-3.1 0-5.8-2.1-6.7-5H1.3v3.1C3.3 21.3 7.3 24 12 24z"/><path fill="#FBBC05" d="M5.3 14.3c-.5-1.5-.5-3.1 0-4.6V6.6H1.3c-1.7 3.4-1.7 7.4 0 10.8l4-3.1z"/><path fill="#EA4335" d="M12 4.7c1.7 0 3.3.6 4.5 1.8l3.4-3.4C17.9 1.2 15.1 0 12 0 7.3 0 3.3 2.7 1.3 6.6l4 3.1c.9-2.9 3.6-5 6.7-5z"/></svg>`,
+  apple: `<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M16.4 12.7c0-2.6 2.1-3.8 2.2-3.9-1.2-1.8-3.1-2-3.7-2-1.6-.2-3.1.9-3.9.9-.8 0-2-.9-3.4-.9C5.9 6.8 4.2 7.8 3.3 9.4c-1.9 3.3-.5 8.2 1.4 10.9.9 1.3 2 2.8 3.4 2.7 1.4-.1 1.9-.9 3.5-.9s2.1.9 3.5.9c1.5 0 2.4-1.3 3.3-2.7 1-1.5 1.5-3 1.5-3.1-.1 0-3-1.1-3.5-4.5zM13.9 5.1c.7-.9 1.2-2.1 1.1-3.3-1 0-2.3.7-3 1.6-.7.8-1.3 2-1.1 3.2 1.1.1 2.3-.6 3-1.5z"/></svg>`,
   today: '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>',
   health: '<path d="M3 12h4l2-6 4 12 2-6h6"/>',
   trips: '<path d="M2 16l20-8-6 12-3-5-5-1z"/>',
@@ -459,6 +461,7 @@ function vProfile() {
       <div style="min-width:0;flex:1"><input id="profName" class="namein" value="${esc(st.name || "")}" placeholder="Your name" maxlength="60"><div class="small muted">${esc(st.email)}${since ? ` · since ${esc(since)}` : ""}</div></div>
     </section>
     <div class="sec-h"><h2>Social</h2>${socials.length ? `<span class="small muted">${fmtK(total)} followers</span>` : ""}</div>
+    <div class="small muted" style="margin:-4px 0 10px">Numbers come from the Insights screenshots you drop here, with the date they were read. Live sign-in for Instagram, Facebook, Threads and TikTok arrives once each platform approves LifeOS.</div>
     ${socials.length ? `<div class="socgrid">${socials.map((s, i) => `<button class="card soc" data-soc="${i}"><span class="pl pl-${s.platform}">${PLAT[s.platform]}</span><div class="num">${fmtK(s.followers)}</div><div class="small muted">@${esc(s.handle)}</div><div class="small muted">${s.statsAt ? `followers · ${esc(new Date(s.statsAt).toLocaleDateString(undefined, { month: "short", day: "numeric" }))}` : "no numbers yet"}</div></button>`).join("")}</div>` : `<section class="card"><p style="margin:0">Add your accounts, then drop an Insights screenshot and the follower, reach and view numbers are read into your profile with the date.</p></section>`}
     <div class="actions"><button class="btn volt" data-act="addsocial">${icon(I.plus, 18)} Add account</button>${socials.length ? `<button class="btn ghost" data-act="socialshot">${icon(I.img, 18)} Update from screenshot</button>` : ""}</div>
     <div class="sec-h"><h2>Connections</h2><button class="link" data-act="settings">Manage</button></div>
@@ -1015,6 +1018,25 @@ async function syncCards(quiet = false) {
 }
 
 /* ---------- settings ---------- */
+function icloudSheet(onboarding) {
+  sheet(`<h2>Sign in with iCloud</h2>
+    <p class="muted small">Apple asks third-party apps to use an app-specific password instead of your real one. It takes a minute and you only do it once.</p>
+    <ol class="small steps"><li>Open <a class="link" href="https://account.apple.com/account/manage" target="_blank" rel="noopener">account.apple.com</a> and sign in.</li><li>Tap <b>Sign-In and Security</b>, then <b>App-Specific Passwords</b>, then <b>+</b>. Name it LifeOS.</li><li>Copy the password Apple shows and paste it below.</li></ol>
+    <div class="field"><label class="label" for="icUser">Apple ID</label><input id="icUser" type="email" autocomplete="username" inputmode="email" placeholder="you@icloud.com"></div>
+    <div class="field"><label class="label" for="icPass">App-specific password</label><input id="icPass" type="password" autocomplete="off" placeholder="xxxx-xxxx-xxxx-xxxx"></div>
+    <div class="small muted">Stored encrypted. LifeOS only reads your calendars. Remove it any time from Settings.</div>
+    <div class="err" id="icErr"></div>
+    <div class="actions"><button class="btn volt" id="icGo">Connect iCloud</button><button class="btn ghost" data-close>Cancel</button></div>`, (el) => {
+    el.querySelector("#icGo").onclick = async (e) => {
+      const btn = e.currentTarget; btn.disabled = true; btn.innerHTML = `<span class="spin"></span> Signing in`;
+      try {
+        const r = await api("settings/icloud", { method: "POST", body: { appleId: el.querySelector("#icUser").value, password: el.querySelector("#icPass").value } });
+        S.settings = r.settings; S.cal.connected = true; settingsSheet(onboarding); loadCalendar(true);
+        toast(`iCloud connected, ${r.calendars} calendar${r.calendars === 1 ? "" : "s"} found. Building your cards…`); syncCards();
+      } catch (x) { el.querySelector("#icErr").textContent = x.message; btn.disabled = false; btn.textContent = "Connect iCloud"; }
+    };
+  });
+}
 function settingsSheet(onboarding = false) {
   const st = S.settings; const ingestUrl = `${location.origin}/api/ingest/apple`; const cals = st.calendar?.list || [];
   sheet(`${onboarding
@@ -1025,13 +1047,19 @@ function settingsSheet(onboarding = false) {
       <div class="field"><label class="label" for="ouraTok">Personal access token</label><input id="ouraTok" type="password" autocomplete="off" placeholder="Paste from cloud.ouraring.com"></div>
       <div class="small muted" style="margin-top:6px">Create one at <a class="link" href="https://cloud.ouraring.com/personal-access-tokens" target="_blank" rel="noopener">cloud.ouraring.com/personal-access-tokens</a>. It's stored encrypted.</div>
       <div class="actions"><button class="btn volt" id="ouraOn">Connect Oura</button></div>`}
-    <div class="conn"><div><h4>Calendars</h4><div class="small muted">${cals.length ? `${cals.length === 1 ? "One calendar" : cals.length + " calendars"} connected. Refresh every 5 minutes, merged into one view.` : "Personal and work, Google, iCloud or Outlook. Each one uses its private iCal address."}</div></div><span class="chip ${cals.length ? "ok" : "wait"}">${cals.length ? "On" : "Off"}</span></div>
-    ${cals.map((c) => `<div class="calrow"><div style="min-width:0"><div style="font-weight:600">${esc(c.label)}</div><div class="small muted">${esc(c.host)}</div></div><button class="btn ghost" data-calrm="${esc(c.id)}" data-label="${esc(c.label)}" style="height:34px">Remove</button></div>`).join("")}
+    <div class="conn"><div><h4>Calendars</h4><div class="small muted">${cals.length ? `${cals.length === 1 ? "One account" : cals.length + " accounts"} connected. Refreshed every 5 minutes, merged into one view.` : "Sign in once and every calendar on the account comes with it. Personal and work both welcome."}</div></div><span class="chip ${cals.length ? "ok" : "wait"}">${cals.length ? "On" : "Off"}</span></div>
+    ${cals.map((c) => `<div class="calrow"><div style="min-width:0"><div style="font-weight:600;overflow-wrap:anywhere">${esc(c.kind === "ics" ? c.label : c.email || c.label)}</div><div class="small muted">${esc(c.host)}${c.kind === "ics" ? " link" : ""}${c.calendars ? ` · ${c.calendars} calendar${c.calendars === 1 ? "" : "s"}` : ""}</div></div><button class="btn ghost" data-calrm="${esc(c.id)}" data-label="${esc(c.label)}" style="height:34px">Remove</button></div>`).join("")}
     ${cals.length < 6 ? `
-      <div class="small" style="margin-top:${cals.length ? 10 : 0}px">${cals.length ? "Add another, like your work calendar." : "Your trips, concerts and events build themselves from these."} On a computer, open <a class="link" href="https://calendar.google.com/calendar/r/settings" target="_blank" rel="noopener">Google Calendar settings</a>, pick the calendar on the left, scroll to <b>Integrate calendar</b>, and copy <b>Secret address in iCal format</b>. For a work account, sign in to that account first. Outlook: Settings, Calendar, Shared calendars, Publish a calendar, copy the ICS link.</div>
-      <div class="field"><label class="label" for="icsLabel">Name</label><input id="icsLabel" type="text" autocomplete="off" maxlength="30" placeholder="${cals.length ? (cals.some((c) => /work/i.test(c.label)) ? "Family" : "Work") : "Personal"}"></div>
-      <div class="field"><label class="label" for="icsUrl">Secret iCal address</label><input id="icsUrl" type="url" autocomplete="off" placeholder="https://calendar.google.com/calendar/ical/…/basic.ics"></div>
-      <div class="actions"><button class="btn volt" id="calOn">${cals.length ? "Add calendar" : "Connect calendar"}</button></div>` : ""}
+      <div class="signin-row">
+        ${st.google?.available ? `<a class="btn signin" href="/api/connect/google" id="googleOn">${I.google}<span>Continue with Google</span></a>` : ""}
+        <button class="btn signin" id="icloudOn">${I.apple}<span>Sign in with iCloud</span></button>
+      </div>
+      <details class="adv"><summary class="small">Add a calendar by link instead${st.google?.available ? "" : " (Google, Outlook)"}</summary>
+        <div class="small muted" style="margin-top:8px">On a computer, open <a class="link" href="https://calendar.google.com/calendar/r/settings" target="_blank" rel="noopener">Google Calendar settings</a>, pick the calendar on the left, scroll to <b>Integrate calendar</b>, and copy <b>Secret address in iCal format</b>. Outlook: Settings, Calendar, Shared calendars, Publish a calendar, copy the ICS link.</div>
+        <div class="field"><label class="label" for="icsLabel">Name</label><input id="icsLabel" type="text" autocomplete="off" maxlength="30" placeholder="${cals.length ? (cals.some((c) => /work/i.test(c.label)) ? "Family" : "Work") : "Personal"}"></div>
+        <div class="field"><label class="label" for="icsUrl">Secret iCal address</label><input id="icsUrl" type="url" autocomplete="off" placeholder="https://calendar.google.com/calendar/ical/…/basic.ics"></div>
+        <div class="actions"><button class="btn" id="calOn">Add by link</button></div>
+      </details>` : ""}
     <div class="conn"><div><h4>Apple Health</h4><div class="small muted">A Shortcut automation sends each day's numbers here.</div></div><span class="chip ${latestFor(S.days, "apple") ? "ok" : "wait"}">${latestFor(S.days, "apple") ? "On" : "Off"}</span></div>
     <div class="small">In the Shortcuts app, build a daily automation that finds today's Health samples and sends them with <b>Get Contents of URL</b>:</div>
     <div class="field"><span class="label">URL (method POST)</span><code class="key">${esc(ingestUrl)}</code></div>
@@ -1063,6 +1091,7 @@ function settingsSheet(onboarding = false) {
         toast(`${esc(r.label)} calendar connected, ${r.count} event${r.count === 1 ? "" : "s"} ahead. Building your cards…`); syncCards();
       } catch (x) { err(x); btn.disabled = false; btn.textContent = was; }
     });
+    el.querySelector("#icloudOn")?.addEventListener("click", () => icloudSheet(onboarding));
     el.querySelectorAll("[data-calrm]").forEach((b) => b.addEventListener("click", async () => {
       if (!b.dataset.armed) { b.dataset.armed = "1"; b.textContent = "Tap again to remove"; return; }
       try { const r = await api("settings/calendar", { method: "DELETE", body: { id: b.dataset.calrm } }); S.settings = r.settings; S.cal = { ...S.cal, status: "idle", events: [], fetchedAt: null, error: null, connected: !!r.settings.calendar?.connected }; settingsSheet(onboarding); if (S.cal.connected) loadCalendar(true); render(); toast(`${b.dataset.label} calendar removed. Its cards stay.`); } catch (x) { err(x); }
@@ -1184,7 +1213,13 @@ async function boot() {
   render();
   loadCalendar();
   clearInterval(calTimer); calTimer = setInterval(() => { if (document.visibilityState === "visible") loadCalendar(); }, 5 * 60_000);
-  if (!S.settings.onboarded) settingsSheet(true);
+  const q = new URLSearchParams(location.search);
+  if (q.has("connected") || q.has("connect_error")) {
+    history.replaceState(null, "", location.pathname);
+    if (q.has("connected")) { S.cal.connected = true; toast(`Google connected (${q.get("connected")}). Building your cards…`); loadCalendar(true); syncCards(); }
+    else toast(q.get("connect_error"));
+    settingsSheet(!S.settings.onboarded);
+  } else if (!S.settings.onboarded) settingsSheet(true);
   // Rebuild cards from the calendar if it hasn't happened in the last 6 hours.
   const cs = S.settings.cardsSyncedAt;
   if (S.settings.calendar?.connected && (!cs || Date.now() - Date.parse(cs) > 6 * 3600e3)) syncCards(true);

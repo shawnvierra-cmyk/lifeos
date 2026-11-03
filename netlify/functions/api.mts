@@ -8,7 +8,9 @@ import {
   newId, saveProfile, sessionUid, setJSON, store, verifyPassword, ymdInTz, type Profile,
 } from "../lib/core.mts";
 import { checkOuraToken, ingestAppleRows, listDays, logDay, putDay, readScreenshot, faceFocus, writeGuide, aiAvailable, aiSource, SOURCES, cleanFields, type Source, type Day } from "../lib/health.mts";
-import { calendarEvents, calendarSources, hasCalendar, fetchIcs, icsHost, parseEvents, validIcsUrl, MAX_CALENDARS } from "../lib/calendar.mts";
+import { calendarEvents, calendarSources, hasCalendar, fetchIcs, icsHost, parseIcs, validIcsUrl, sourceKind, MAX_CALENDARS } from "../lib/calendar.mts";
+import { googleAuthUrl, googleAvailable, googleConnect } from "../lib/google.mts";
+import { icloudConnect } from "../lib/icloud.mts";
 import { deleteMedia, getMeta, putChunk, putWhole, readWhole, serveMedia } from "../lib/media.mts";
 import { downloadCommons, searchCommons } from "../lib/photos.mts";
 import { syncOura } from "../lib/health.mts";
@@ -31,12 +33,14 @@ async function listJSON<T>(prefix: string): Promise<T[]> {
 }
 const body = async (req: Request) => { try { return await req.json(); } catch { return {}; } };
 const str = (v: unknown, max = 500) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+const uniqueLabel = (taken: string[], want: string) => { let l = want.slice(0, 30), n = 2; while (taken.some((t) => t.toLowerCase() === l.toLowerCase())) l = `${want.slice(0, 26)} ${n++}`; return l; };
 
 function publicSettings(p: Profile) {
   return {
     email: p.email, tz: p.tz,
     oura: p.oura ? { connected: true, lastSync: p.oura.lastSync ?? null, lastError: p.oura.lastError ?? null } : { connected: false },
-    calendar: { connected: hasCalendar(p), list: calendarSources(p).map((c) => ({ id: c.id, label: c.label, host: c.host })) },
+    calendar: { connected: hasCalendar(p), list: calendarSources(p).map((c) => ({ id: c.id, label: c.label, kind: sourceKind(c), host: c.host, email: c.email || null, calendars: c.calendars?.length ?? null })) },
+    google: { available: googleAvailable() },
     ingestKey: p.ingestKey ?? null,
     ai: aiAvailable(),
     onboarded: !!p.onboarded,
@@ -175,13 +179,52 @@ export default async (req: Request, context: Context) => {
       const label = str(d.label, 30) || (have.length === 0 ? "Personal" : have.length === 1 ? "Work" : `Calendar ${have.length + 1}`);
       if (have.some((c) => c.label.toLowerCase() === label.toLowerCase())) return err(`You already have a calendar called ${label}. Pick another name.`);
       let count = 0;
-      try { count = parseEvents(await fetchIcs(enc, `your ${label} calendar`), new Date(Date.now() - 2 * 864e5), new Date(Date.now() + 45 * 864e5)).length; }
+      try { count = parseIcs(await fetchIcs(enc, `your ${label} calendar`), new Date(Date.now() - 2 * 864e5), new Date(Date.now() + 45 * 864e5)).length; }
       catch (e: any) { return err(e.message); }
       // Move a single pre-existing address into the list so everything lives in one place.
       if (p.ics?.enc) { p.calendars = [{ id: newId(6), label: "Calendar", enc: p.ics.enc, host: "Google", addedAt: p.createdAt }, ...(p.calendars || [])]; delete p.ics; }
-      p.calendars = [...(p.calendars || []), { id: newId(6), label, enc, host: icsHost(u), addedAt: new Date().toISOString() }];
+      p.calendars = [...(p.calendars || []), { id: newId(6), label, kind: "ics", enc, host: icsHost(u), addedAt: new Date().toISOString() }];
       await saveProfile(p); await store().delete(`u/${uid}/cache/calendar`);
       return json({ settings: publicSettings(p), count, label });
+    }
+    /* Sign in with Google: one tap, every calendar on the account. */
+    if (a === "connect" && b === "google" && !c && m === "GET") {
+      if (!googleAvailable()) return err("Google sign-in isn't set up for this site yet. Add a calendar by link instead.", 503);
+      if (calendarSources(p).length >= MAX_CALENDARS) return err(`Up to ${MAX_CALENDARS} calendars per account.`);
+      const state = newId(18);
+      return new Response(null, { status: 302, headers: { location: googleAuthUrl(url.origin, state), "set-cookie": `lifeos_o=${state}; Path=/api/connect; HttpOnly; Secure; SameSite=Lax; Max-Age=600` } });
+    }
+    if (a === "connect" && b === "google" && c === "callback" && m === "GET") {
+      const back = (msg: string, ok = false) => new Response(null, { status: 302, headers: { location: `/?${ok ? "connected" : "connect_error"}=${encodeURIComponent(msg)}`, "set-cookie": "lifeos_o=; Path=/api/connect; HttpOnly; Secure; SameSite=Lax; Max-Age=0" } });
+      const want = (req.headers.get("cookie") || "").split(/;\s*/).find((x) => x.startsWith("lifeos_o="))?.slice(9);
+      if (!want || url.searchParams.get("state") !== want) return back("That Google sign-in expired. Try again.");
+      if (url.searchParams.get("error")) return back("Google sign-in was cancelled.");
+      const code = url.searchParams.get("code") || "";
+      try {
+        const g = await googleConnect(url.origin, code);
+        if (p.ics?.enc) { p.calendars = [{ id: newId(6), label: "Calendar", kind: "ics", enc: p.ics.enc, host: "Google", addedAt: p.createdAt }, ...(p.calendars || [])]; delete p.ics; }
+        const list = (p.calendars || []).filter((x) => !(x.kind === "google" && x.email && x.email === g.email)); // reconnecting the same account replaces it
+        const label = uniqueLabel(list.map((x) => x.label), g.email.split("@")[0] || "Google");
+        p.calendars = [...list, { id: newId(6), label, kind: "google", enc: g.enc, host: "Google", email: g.email, calendars: g.calendars, addedAt: new Date().toISOString() }];
+        await saveProfile(p); await store().delete(`u/${uid}/cache/calendar`);
+        return back(g.email || "Google", true);
+      } catch (e: any) { return back(e.message || "Google sign-in failed."); }
+    }
+    /* Sign in with iCloud: Apple ID + app-specific password, every calendar on the account. */
+    if (a === "settings" && b === "icloud" && m === "POST") {
+      const d = await body(req);
+      const user = str(d.appleId, 200), pass = str(d.password, 200);
+      if (!/^\S+@\S+\.\S+$/.test(user)) return err("Enter the email address of your Apple ID.");
+      if (pass.replace(/[\s-]/g, "").length < 12) return err("Paste the app-specific password Apple generated (it looks like xxxx-xxxx-xxxx-xxxx).");
+      if (calendarSources(p).length >= MAX_CALENDARS) return err(`Up to ${MAX_CALENDARS} calendars per account.`);
+      let r;
+      try { r = await icloudConnect(user, pass); } catch (e: any) { return err(e.message); }
+      if (p.ics?.enc) { p.calendars = [{ id: newId(6), label: "Calendar", kind: "ics", enc: p.ics.enc, host: "Google", addedAt: p.createdAt }, ...(p.calendars || [])]; delete p.ics; }
+      const list = (p.calendars || []).filter((x) => !(x.kind === "icloud" && x.email === r.email));
+      const label = uniqueLabel(list.map((x) => x.label), "iCloud");
+      p.calendars = [...list, { id: newId(6), label, kind: "icloud", enc: r.enc, host: "iCloud", email: r.email, calendars: r.calendars, addedAt: new Date().toISOString() }];
+      await saveProfile(p); await store().delete(`u/${uid}/cache/calendar`);
+      return json({ settings: publicSettings(p), label, calendars: r.calendars.length });
     }
     if (a === "settings" && b === "calendar" && m === "DELETE") {
       const id = str((await body(req)).id, 40);

@@ -173,6 +173,11 @@ img{max-width:100%}
 .iconbtn{width:40px;height:40px;border-radius:50%;background:var(--surface);display:grid;place-items:center}
 .conn{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 0;border-top:1px solid var(--line)}
 .conn:first-of-type{border-top:0}
+.signin-row{display:flex;flex-direction:column;gap:10px;margin-top:12px}
+.btn.signin{display:flex;align-items:center;justify-content:center;gap:10px;height:48px;font-size:16px;background:var(--surface);color:var(--ink);border:1px solid var(--line);text-decoration:none}
+.btn.signin:active{transform:scale(.98)}
+.adv{margin-top:12px}.adv summary{cursor:pointer;color:var(--ink-2);list-style:none}.adv summary::before{content:"▸ ";font-size:11px}.adv[open] summary::before{content:"▾ "}
+.steps{padding-left:18px;margin:8px 0;line-height:1.5}.steps li{margin-bottom:4px}
 .calrow{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 12px;margin-top:8px;border-radius:12px;background:var(--surface);border:1px solid var(--line)}
 .caltag{display:inline-block;margin-left:8px;padding:1px 7px;border-radius:99px;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;background:var(--surface);border:1px solid var(--line);color:var(--ink-2);vertical-align:1px}
 .conn h4{margin:0;font-size:16px}

@@ -6,10 +6,9 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
-import ical from "node-ical";
 import { getJSON, newId, setJSON, store, type Profile, saveProfile } from "./core.mts";
 import { aiAvailable, faceFocus } from "./health.mts";
-import { calendarSources, fetchIcs } from "./calendar.mts";
+import { hasCalendar, loadAll } from "./calendar.mts";
 import { downloadCommons, searchCommons } from "./photos.mts";
 import { putWhole } from "./media.mts";
 
@@ -38,29 +37,21 @@ function localStamp(d: Date, tz: string, allDay: boolean) {
 
 /** Calendar events that look like travel, tickets, stays or reservations, in a wide window. */
 export async function candidateEvents(p: Profile) {
-  const sources = calendarSources(p);
-  if (!sources.length) return [];
-  const got = await Promise.allSettled(sources.map((s) => fetchIcs(s.enc, `your ${s.label} calendar`)));
-  const texts = got.filter((g): g is PromiseFulfilledResult<string> => g.status === "fulfilled").map((g) => g.value);
-  if (!texts.length) throw new Error((got[0] as PromiseRejectedResult).reason?.message || "Couldn't read your calendar right now.");
-  const data: Record<string, any> = Object.assign({}, ...texts.map((t) => ical.sync.parseICS(t)));
+  if (!hasCalendar(p)) return [];
   const tz = p.tz || "America/Denver";
   const from = new Date(Date.now() - 45 * 864e5), to = new Date(Date.now() + 400 * 864e5);
+  const { events, errors, total } = await loadAll(p, from, to);
+  if (errors.length === total) throw new Error(errors[0] || "Couldn't read your calendar right now.");
   const looks = /\b(flight|airline|airport|depart|arriv|boarding|check[- ]?in|hotel|resort|airbnb|vrbo|stay|reservation|booking|confirm|tickets?|concert|tour|festival|show|game|match|vs\.?|@|stadium|arena|center|centre|theat|trip|vacation|cruise|rental|car|train|amtrak|itinerary|wedding|conference|summit|expo|\b[A-Z]{2}\s?\d{2,4}\b)/i;
   const out: { id: string; title: string; location: string; description: string; start: string; end: string; allDay: boolean }[] = [];
-  for (const c of Object.values(data) as any[]) {
-    if (c?.type !== "VEVENT" || c.status === "CANCELLED" || c.recurrenceid) continue;
-    if (c.rrule) continue; // weekly routines are never trips
-    const start = new Date(c.start), end = new Date(c.end ?? c.start);
-    if (end < from || start > to) continue;
-    const title = text(c.summary), location = text(c.location), description = text(c.description).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-    const fromGmail = /created from an email you received/i.test(description);
-    if (!fromGmail && !looks.test(`${title} ${location} ${description.slice(0, 200)}`)) continue;
-    const allDay = c.datetype === "date";
-    out.push({ id: String(c.uid), title, location, description: description.slice(0, 500), start: localStamp(start, tz, allDay), end: localStamp(end, tz, allDay), allDay });
+  for (const e of events) {
+    if (e.recurring) continue; // weekly routines are never trips
+    const fromGmail = /created from an email you received/i.test(e.description);
+    if (!fromGmail && !looks.test(`${e.title} ${e.location} ${e.description.slice(0, 200)}`)) continue;
+    out.push({ id: `${e.uid}_${e.start.getTime()}`, title: e.title, location: e.location, description: e.description.slice(0, 500), start: localStamp(e.start, tz, e.allDay), end: localStamp(e.end, tz, e.allDay), allDay: e.allDay });
     if (out.length >= 150) break;
   }
-  return out.sort((a, b) => (a.start < b.start ? -1 : 1));
+  return out;
 }
 
 const Card = z.object({

@@ -25,10 +25,11 @@ Live at **https://life.from5to10million.com** once the Netlify setup below is do
 |---|---|---|
 | `ANTHROPIC_API_KEY` | Reading health screenshots and framing header photos | Netlify → Project configuration → Environment variables (scope: Functions) |
 | `INVITE_CODE` | Optional. Lets more people create accounts. | Same |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Optional. Turns on "Continue with Google" for calendars. Create an OAuth client (Web application) in Google Cloud Console with the redirect URI `https://<your-domain>/api/connect/google/callback`, scopes `calendar.readonly` and `userinfo.email`. Without them, people use "Sign in with iCloud" or a calendar link. | Same |
 
 ## Connections
 
 - **Oura**: paste a personal access token from cloud.ouraring.com/personal-access-tokens in Settings. It's stored encrypted, synced every morning, and also synced when you open the app if the last sync was more than 3 hours ago.
-- **Calendars**: up to six per account, personal and work, Google, iCloud or Outlook. Paste each one's *Secret address in iCal format* in Settings with a name. They are merged into one view and refresh every 5 minutes; one failing never hides the others.
+- **Calendars**: up to six accounts, personal and work. *Continue with Google* (OAuth, every calendar on the account), *Sign in with iCloud* (Apple ID + app-specific password over CalDAV, every calendar on the account), or a private iCal link (Google, iCloud, Outlook). Merged into one view, refreshed every 5 minutes; one failing never hides the others. Tokens and passwords are stored encrypted.
 - **Apple Health**: a Shortcuts automation POSTs each day's numbers to `/api/ingest/apple` with the key shown in Settings. You can also import the full Health export (`export.xml`) from the Health tab.
 - **Eight Sleep and smart scales**: drop or paste screenshots. Only numbers visible in the screenshot are logged, to the day the screenshot shows.
