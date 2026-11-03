@@ -7,7 +7,7 @@ import {
   clearSessionCookie, emailKey, encrypt, env_, err, getJSON, getProfile, hashPassword, isYmd, json, makeSessionCookie,
   newId, saveProfile, sessionUid, setJSON, store, verifyPassword, ymdInTz, type Profile,
 } from "../lib/core.mts";
-import { checkOuraToken, ingestAppleRows, listDays, logDay, putDay, readScreenshot, faceFocus, aiAvailable, aiSource, SOURCES, cleanFields, type Source, type Day } from "../lib/health.mts";
+import { checkOuraToken, ingestAppleRows, listDays, logDay, putDay, readScreenshot, faceFocus, writeGuide, aiAvailable, aiSource, SOURCES, cleanFields, type Source, type Day } from "../lib/health.mts";
 import { calendarEvents, validIcsUrl } from "../lib/calendar.mts";
 import { deleteMedia, getMeta, putChunk, putWhole, readWhole, serveMedia } from "../lib/media.mts";
 import { downloadCommons, searchCommons } from "../lib/photos.mts";
@@ -16,6 +16,7 @@ import { syncOura } from "../lib/health.mts";
 type Trip = {
   id: string; title: string; type: "trip" | "concert" | "event"; place: string; start: string; end: string; calId?: string;
   seedId?: string; summary?: string; itinerary?: { at: string; text: string }[];
+  guide?: { kind: string; title: string; body: string; linkLabel?: string; linkUrl?: string; at: string };
   photo?: { media: string; credit: string; focus: number; source?: string };
   journal: { id: string; at: string; text: string; media: { id: string; type: string }[] }[];
   createdAt: string;
@@ -240,6 +241,12 @@ export default async (req: Request, context: Context) => {
       await setJSON(tripKey(uid, b), t);
       return json({ trip: t });
     }
+    if (a === "trips" && b && c === "guide" && m === "POST") {
+      const t = await getJSON<Trip>(tripKey(uid, b));
+      if (!t) return err("Card not found.", 404);
+      if (!t.guide) { const g = await writeGuide(t); if (g) { t.guide = g; await setJSON(tripKey(uid, b), t); } }
+      return json({ trip: t });
+    }
     if (a === "trips" && b && c === "photo" && m === "POST") {
       const t = await getJSON<Trip>(tripKey(uid, b));
       if (!t) return err("Card not found.", 404);
@@ -285,6 +292,7 @@ export default async (req: Request, context: Context) => {
         const t: Trip = {
           id: newId(), seedId, title, type, place: str(c?.place, 160), start, end: isYmd(c?.end) && c.end >= start ? c.end : start,
           summary: str(c?.summary, 4000) || undefined,
+          guide: c?.guide && typeof c.guide.body === "string" ? { kind: str(c.guide.kind, 30) || "City guide", title: str(c.guide.title, 80), body: str(c.guide.body, 900), linkLabel: str(c.guide.linkLabel, 60) || undefined, linkUrl: /^https:\/\/\S+$/.test(c.guide.linkUrl || "") ? str(c.guide.linkUrl, 300) : undefined, at: new Date().toISOString() } : undefined,
           itinerary: Array.isArray(c?.itinerary) ? c.itinerary.slice(0, 60).map((x: any) => ({ at: str(x?.at, 20), text: str(x?.text, 300) })).filter((x: any) => x.text) : undefined,
           journal: [], createdAt: new Date().toISOString(),
         };

@@ -216,3 +216,28 @@ export async function faceFocus(image: Buffer, mediaType: string): Promise<numbe
     return typeof y === "number" ? Math.max(0, Math.min(100, Math.round(y))) : null;
   } catch { return null; }
 }
+
+/** A short practical guide for a trip or concert card. Returns null when Claude isn't available or declines. */
+export async function writeGuide(t: { title: string; type: string; place: string; start: string; end: string; summary?: string; itinerary?: { at: string; text: string }[] }) {
+  if (!aiAvailable()) return null;
+  try {
+    const client = claude(40_000, 0);
+    const Guide = z.object({
+      kind: z.enum(["City guide", "Artist guide", "Event guide"]),
+      title: z.string().describe("A short heading, under 8 words"),
+      body: z.string().describe("3 to 5 plain sentences"),
+      linkLabel: z.string().nullable(),
+      linkUrl: z.string().nullable().describe("Only an official tourism board, venue or artist site you are confident exists; otherwise null"),
+    });
+    const prompt = `Write a short guide for a card in someone's personal dashboard.
+Card: ${t.title} (${t.type}). Place: ${t.place || "unknown"}. Dates: ${t.start}${t.end !== t.start ? " to " + t.end : ""}.
+${t.summary ? "Notes: " + t.summary : ""}
+${t.itinerary?.length ? "Itinerary: " + t.itinerary.map((i) => `${i.at} ${i.text}`).join("; ") : ""}
+For a trip: 3 to 5 sentences on getting around, what the weather is usually like at that time of year in general terms, and one or two well-known areas worth seeing. For a concert: 2 to 4 sentences on who the artist is and what the tour is, plus a line about the venue. Plain and practical, no hype, no exclamation marks. Never state prices, opening hours, phone numbers, exact temperatures or anything you aren't sure of.`;
+    const res = await client.messages.parse({ model: "claude-opus-5-5", max_tokens: 2000, output_config: { effort: "low", format: zodOutputFormat(Guide) }, messages: [{ role: "user", content: prompt }] });
+    const g = res.parsed_output;
+    if (!g?.body) return null;
+    const url = g.linkUrl && /^https:\/\/\S+$/.test(g.linkUrl) ? g.linkUrl.slice(0, 300) : undefined;
+    return { kind: g.kind, title: g.title.slice(0, 80), body: g.body.slice(0, 900), linkLabel: url ? (g.linkLabel || "Open").slice(0, 60) : undefined, linkUrl: url, at: new Date().toISOString() };
+  } catch (e) { console.error("writeGuide failed", (e as any)?.message); return null; }
+}

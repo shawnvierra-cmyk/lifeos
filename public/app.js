@@ -33,6 +33,17 @@ const I = {
   search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
 };
 
+/* ---------- theme ---------- */
+function applyTheme() {
+  const pref = store.get("lifeos.theme") || "system";
+  const root = document.documentElement;
+  if (pref === "system") delete root.dataset.theme; else root.dataset.theme = pref;
+  const dark = pref === "dark" || (pref === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
+  const m = document.querySelector("meta[name=theme-color]"); if (m) m.content = dark ? "#0B0B0A" : "#F2F3EF";
+}
+applyTheme();
+try { matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme); } catch {}
+
 /* ---------- API ---------- */
 async function api(path, { method = "GET", body, headers = {}, raw } = {}) {
   const opts = { method, headers: { ...headers }, credentials: "same-origin" };
@@ -156,7 +167,7 @@ function spark(vals, h = 56) {
   const x = (i) => P + (i * (W - 2 * P)) / (vals.length - 1), y = (v) => H - P - (hi === lo ? 0.5 : (v - lo) / (hi - lo)) * (H - 2 * P);
   const line = pts.map((p, k) => `${k ? "L" : "M"}${x(p.i).toFixed(1)},${y(p.v).toFixed(1)}`).join("");
   const area = `${line}L${x(pts.at(-1).i).toFixed(1)},${H}L${x(pts[0].i).toFixed(1)},${H}Z`; const e = pts.at(-1);
-  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="14 day trend"><path d="${area}" fill="#D2FF1F" opacity=".55"/><path d="${line}" fill="none" stroke="#0B0B0A" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="${x(e.i)}" cy="${y(e.v)}" r="4" fill="#0B0B0A"/></svg>`;
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="14 day trend"><path d="${area}" style="fill:var(--volt)" opacity=".55"/><path d="${line}" fill="none" style="stroke:var(--ink)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="${x(e.i)}" cy="${y(e.v)}" r="4" style="fill:var(--ink)"/></svg>`;
 }
 
 /* ---------- auth ---------- */
@@ -312,18 +323,24 @@ function vHealth() {
 }
 
 /* Trips */
+function daysBadge(t) {
+  const today = todayStr();
+  if ((t.end || t.start) < today) return "";
+  const d = Math.round((parseYmd(t.start) - parseYmd(today)) / 864e5);
+  if (d <= 0) return `<div class="badge"><b>${t.start === today ? "Today" : "Now"}</b></div>`;
+  return `<div class="badge"><b>${d} ${d === 1 ? "day" : "days"}</b><span>to go</span></div>`;
+}
 function coverHtml(t) {
-  if (t.photo?.media) return `<img src="${mediaUrl(t.photo.media)}" alt="${esc(t.title)}" style="object-position:50% ${t.photo.focus ?? 25}%" loading="lazy"><span class="credit">${esc(t.photo.credit)}</span>`;
-  return `<div class="poster"><span class="need">Header photo needed</span><div class="label" style="color:var(--volt)">${esc({ trip: "Trip", concert: "Concert", event: "Event" }[t.type] || "Trip")}</div><div class="pt">${esc(t.title)}</div></div>`;
+  const pill = `<span class="pill">${esc({ trip: "Trip", concert: "Concert", event: "Event" }[t.type] || "Trip")}</span>`;
+  if (t.photo?.media) return `<img src="${mediaUrl(t.photo.media)}" alt="${esc(t.title)}" style="object-position:50% ${t.photo.focus ?? 25}%" loading="lazy"><span class="credit">${esc(t.photo.credit)}</span>${pill}${daysBadge(t)}`;
+  return `<div class="poster"><span class="need">Header photo needed</span><div class="pt">${esc(t.title)}</div></div>${pill}${daysBadge(t)}`;
 }
 function tripCard(t, isSample) {
   const today = todayStr(); const upcoming = (t.end || t.start) >= today;
-  const daysTo = Math.round((parseYmd(t.start) - parseYmd(today)) / 864e5);
   const n = (t.journal || []).length;
-  const when = upcoming ? (daysTo <= 0 ? `<div class="num">Now</div>` : `<div class="num">${daysTo}</div><div class="small muted">day${daysTo === 1 ? "" : "s"} away</div>`) : `<div class="small muted">${n} entr${n === 1 ? "y" : "ies"}</div>`;
   const range = t.end && t.end !== t.start ? `${fmtDay(t.start)} – ${fmtDay(t.end)}` : fmtDay(t.start);
   return `<button class="trip" data-trip="${esc(t.id)}"><div class="cover">${coverHtml(t)}</div>
-    <div class="meta"><div style="min-width:0"><h3>${esc(t.title)} ${isSample ? `<span class="chip sample" style="vertical-align:3px">Sample</span>` : ""}</h3><div class="small muted">${esc(t.place || "")}${t.place ? " · " : ""}${esc(range)}</div></div><div class="when">${when}</div></div></button>`;
+    <div class="meta"><div style="min-width:0"><h3>${esc(t.title)} ${isSample ? `<span class="chip sample" style="vertical-align:3px">Sample</span>` : ""}</h3><div class="small muted">${esc(t.place || "")}${t.place ? " · " : ""}${esc(range)}</div></div>${!upcoming && n ? `<div class="when"><div class="small muted">${n} entr${n === 1 ? "y" : "ies"}</div></div>` : ""}</div></button>`;
 }
 function calSuggestions() {
   const have = new Set(S.trips.map((t) => t.calId).filter(Boolean));
@@ -579,17 +596,27 @@ function fmtWhen(at) {
   const m = at.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}))?/); if (!m) return at;
   const d = new Date(+m[1], +m[2] - 1, +m[3], m[4] ? +m[4] : 12, m[5] ? +m[5] : 0);
   const day = d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
-  return m[4] ? `${day} ${fmtTime(d)}` : day;
+  return m[4] ? `${day}\n${fmtTime(d)}` : day;
+}
+function guideHtml(g) {
+  if (!g) return "";
+  return `<section class="guide"><div class="label guide-k">${esc(g.kind || "City guide")}</div><h3>${esc(g.title)}</h3><p>${esc(g.body)}</p>${g.linkUrl ? `<a class="link" href="${esc(g.linkUrl)}" target="_blank" rel="noopener">${esc(g.linkLabel || "Open")}</a>` : ""}</section>`;
 }
 function tripDetail(id) {
   const isSample = !S.trips.length; const t = tripsSrc().find((x) => x.id === id); if (!t) return;
-  const range = t.end && t.end !== t.start ? `${fmtDay(t.start)} – ${fmtDay(t.end)}` : fmtDay(t.start);
+  const long = (s) => parseYmd(s).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
   const entries = [...(t.journal || [])].sort((a, b) => (a.at < b.at ? 1 : -1));
+  const chips = [...new Set((t.place || "").split(/\s*[·,]\s*/).filter(Boolean))].slice(0, 3);
+  const itin = [...(t.itinerary || [])].sort((a, b) => (a.at < b.at ? -1 : 1));
   sheet(`<div class="cover" style="border-radius:16px;margin:0 0 14px">${coverHtml(t)}</div>
-    <h2>${esc(t.title)}</h2><div class="muted">${esc(t.place || "")}${t.place ? " · " : ""}${esc(range)}</div>
+    <div class="dates"><b>${esc(long(t.start))}</b>${t.end && t.end !== t.start ? ` <span class="muted">to ${esc(long(t.end))}</span>` : ""}</div>
+    <h2>${esc(t.title)}</h2>
+    ${t.place ? `<div class="muted">${esc(t.place)}</div>` : ""}
+    ${chips.length > 1 ? `<div class="chips">${chips.map((c) => `<span class="chipx">${esc(c)}</span>`).join("")}</div>` : ""}
     ${t.summary ? `<p class="summary">${esc(t.summary)}</p>` : ""}
-    ${t.itinerary?.length ? `<div class="itin"><div class="label">Itinerary</div>${[...t.itinerary].sort((a, b) => (a.at < b.at ? -1 : 1)).map((i) => `<div class="row"><span class="w">${esc(fmtWhen(i.at))}</span><span>${esc(i.text)}</span></div>`).join("")}</div>` : ""}
-    ${t.photo?.source ? `<div class="small" style="margin-top:4px"><a class="link" href="${esc(t.photo.source)}" target="_blank" rel="noopener">Photo source and license</a></div>` : ""}
+    ${itin.length ? `<details class="itin"><summary>${itin.length} itinerary item${itin.length === 1 ? "" : "s"}</summary>${itin.map((i) => `<div class="row"><span class="w">${esc(fmtWhen(i.at)).replace("\n", "<br>")}</span><span>${esc(i.text)}</span></div>`).join("")}</details>` : ""}
+    <div id="guideSlot">${guideHtml(t.guide)}</div>
+    ${t.photo?.source ? `<div class="small" style="margin-top:10px"><a class="link" href="${esc(t.photo.source)}" target="_blank" rel="noopener">Photo source and license</a></div>` : ""}
     ${isSample ? `<div style="margin-top:12px">${sampleBanner("This is a sample card.")}</div><div class="actions"><button class="btn volt wide" data-act="newtrip">Make your first card</button></div>` : `
     <div class="actions"><button class="btn" id="setPhoto">${t.photo ? "Change header photo" : "Add header photo"}</button><button class="btn ghost" id="editTrip">Edit</button></div>
     <section style="margin-top:18px"><div class="label">Journal</div>
@@ -599,6 +626,9 @@ function tripDetail(id) {
     </section>`}
     <div style="margin-top:10px">${entries.length ? entries.map((e) => `<div class="entry"><div class="label">${esc(new Date(e.at).toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }))}</div>${e.text ? `<p>${esc(e.text)}</p>` : ""}${e.media?.length ? `<div class="media">${e.media.map((m) => (m.type?.startsWith("video") ? `<video src="${mediaUrl(m.id)}#t=0.1" controls playsinline preload="metadata"></video>` : `<a href="${mediaUrl(m.id)}" target="_blank" rel="noopener"><img src="${mediaUrl(m.id)}" alt="" loading="lazy"></a>`)).join("")}</div>` : ""}</div>`).join("") : `<div class="empty small">No journal entries yet.</div>`}</div>`, (el) => {
     if (isSample) return;
+    if (!t.guide && S.settings?.ai) {
+      api(`trips/${t.id}/guide`, { method: "POST", body: {} }).then((r) => { upsertTrip(r.trip); const slot = el.querySelector("#guideSlot"); if (slot && r.trip.guide) slot.innerHTML = guideHtml(r.trip.guide); }).catch(() => {});
+    }
     el.querySelector("#editTrip").onclick = () => tripForm(t);
     el.querySelector("#setPhoto").onclick = () => photoPicker(t);
     const pick = el.querySelector("#jMedia");
@@ -692,8 +722,11 @@ function settingsSheet() {
     <div class="actions"><button class="btn ghost" id="copyKey">Copy key</button><button class="btn ghost" id="newKey">New key</button></div>
     <div class="conn"><div><h4>Screenshot reading</h4><div class="small muted">${st.ai ? "On. Oura, Eight Sleep, Health and scale screenshots are read by Claude and logged to the right day." : "Off. Needs an Anthropic key or Netlify AI in the project settings."}</div></div><span class="chip ${st.ai ? "ok" : "wait"}">${st.ai ? "On" : "Off"}</span></div>
     <div class="conn"><div><h4>Eight Sleep</h4><div class="small muted">Eight Sleep has no public API. Drop screenshots and LifeOS logs score, HRV, deep sleep and bio age.</div></div></div>
+    <div class="conn"><div><h4>Appearance</h4><div class="small muted">Follow your phone, or pick one.</div></div></div>
+    <div class="seg" role="group" aria-label="Appearance">${["system", "light", "dark"].map((v) => `<button data-theme-set="${v}" aria-pressed="${(store.get("lifeos.theme") || "system") === v}">${v[0].toUpperCase() + v.slice(1)}</button>`).join("")}</div>
     <div class="err" id="sErr"></div>
     <div class="actions" style="margin-top:22px"><button class="btn ghost wide" id="signOut">Sign out</button></div>`, (el) => {
+    el.querySelectorAll("[data-theme-set]").forEach((b) => (b.onclick = () => { store.set("lifeos.theme", b.dataset.themeSet); applyTheme(); el.querySelectorAll("[data-theme-set]").forEach((x) => x.setAttribute("aria-pressed", x === b)); }));
     const err = (e) => (el.querySelector("#sErr").textContent = e.message);
     const busy = (b, t) => { b.disabled = true; b.innerHTML = `<span class="spin"></span> ${t}`; };
     el.querySelector("#ouraOn")?.addEventListener("click", async (e) => {
