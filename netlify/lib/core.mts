@@ -105,7 +105,7 @@ export async function decrypt(box: string) {
 /* ---------- profile ---------- */
 export type Profile = {
   uid: string; email: string; createdAt: string; tz?: string;
-  ingestKey?: string;
+  ingestKey?: string; onboarded?: boolean; cardsSyncedAt?: string;
   oura?: { enc: string; lastSync?: string; lastError?: string };
   ics?: { enc: string };
 };

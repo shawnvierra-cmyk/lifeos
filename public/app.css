@@ -4,7 +4,7 @@
   --bg:#F2F3EF; --surface:#FFFFFF; --ink:#0B0B0A; --ink-2:#55574F; --ink-3:#8E9087;
   --line:#E2E4DC; --volt:#D2FF1F; --volt-ink:#0B0B0A; --volt-text:#6B8A00; --good:#1E9E4A; --warn:#C77700; --wait:#B7B9AF; --bad:#B3261E; --on-ink:#FFFFFF; --bar:rgba(255,255,255,.92);
   --display:"Barlow Condensed","Arial Narrow","Roboto Condensed",sans-serif;
-  --body:"Barlow",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --body:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
   --r:22px; --r-sm:14px;
   color-scheme:light;
 }
@@ -27,7 +27,7 @@ input,textarea,select{font:inherit;color:var(--ink)}
 .chip.wait::before{content:"";width:7px;height:7px;border-radius:50%;border:1.5px solid var(--wait)}
 .stack{display:flex;flex-direction:column;gap:14px}
 .card{background:var(--surface);border-radius:var(--r);padding:18px}
-.num{font-family:var(--display);font-style:italic;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.01em;line-height:.9}
+.num{font-family:var(--display);font-style:italic;font-weight:900;font-variant-numeric:tabular-nums;letter-spacing:-.01em;line-height:.9}
 .unit{font-family:var(--body);font-style:normal;font-weight:600;font-size:13px;color:var(--ink-2);margin-left:3px;letter-spacing:0}
 .label{font-size:12px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-2)}
 .muted{color:var(--ink-2)} .small{font-size:13px}
@@ -55,7 +55,7 @@ input,textarea,select{font:inherit;color:var(--ink)}
 .move .sig{margin-top:10px;font-size:13px;font-weight:600}
 .move,.move .label,.move .h,.move p{color:#0B0B0A}
 .sec-h{display:flex;justify-content:space-between;align-items:baseline;margin:10px 2px -4px}
-.sec-h h2{font-family:var(--display);font-style:italic;font-weight:800;font-size:24px;text-transform:uppercase;margin:0}
+.sec-h h2{font-family:var(--display);font-style:italic;font-weight:900;font-size:24px;text-transform:uppercase;margin:0}
 .link{font-weight:600;font-size:14px;text-decoration:underline;text-underline-offset:3px}
 /* Event list */
 .ev{display:grid;grid-template-columns:62px 1fr;gap:12px;padding:12px 0;border-top:1px solid var(--line)}
@@ -64,11 +64,11 @@ input,textarea,select{font:inherit;color:var(--ink)}
 .ev .t small{display:block;font-family:var(--body);font-size:12px;font-weight:500;color:var(--ink-3)}
 .ev .s{font-weight:600;min-width:0;overflow-wrap:anywhere}
 .ev .l{font-size:13px;color:var(--ink-2);overflow-wrap:anywhere}
-.dayhead{font-family:var(--display);font-style:italic;font-weight:800;font-size:20px;text-transform:uppercase;margin:4px 0 6px}
+.dayhead{font-family:var(--display);font-style:italic;font-weight:900;font-size:20px;text-transform:uppercase;margin:4px 0 6px}
 .dayhead.today{display:inline-block;background:var(--volt);color:#0B0B0A;padding:0 8px;border-radius:6px}
 /* Health */
 .srccard .hd{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
-.srccard h3{font-family:var(--display);font-style:italic;font-weight:800;font-size:26px;text-transform:uppercase;margin:0;line-height:1}
+.srccard h3{font-family:var(--display);font-style:italic;font-weight:900;font-size:26px;text-transform:uppercase;margin:0;line-height:1}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px 12px}
 .grid2 .num{font-size:36px;margin-top:4px}
 .waitbox{border:1.5px dashed var(--line);border-radius:14px;padding:14px;color:var(--ink-2);font-size:14px}

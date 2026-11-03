@@ -12,18 +12,10 @@ import { calendarEvents, validIcsUrl } from "../lib/calendar.mts";
 import { deleteMedia, getMeta, putChunk, putWhole, readWhole, serveMedia } from "../lib/media.mts";
 import { downloadCommons, searchCommons } from "../lib/photos.mts";
 import { syncOura } from "../lib/health.mts";
+import { syncCards, fillPhotos, autoPhoto, tripKey, type Trip } from "../lib/cards.mts";
 
-type Trip = {
-  id: string; title: string; type: "trip" | "concert" | "event"; place: string; start: string; end: string; calId?: string;
-  seedId?: string; summary?: string; itinerary?: { at: string; text: string }[];
-  guide?: { kind: string; title: string; body: string; linkLabel?: string; linkUrl?: string; at: string };
-  photo?: { media: string; credit: string; focus: number; source?: string };
-  journal: { id: string; at: string; text: string; media: { id: string; type: string }[] }[];
-  createdAt: string;
-};
 type Note = { id: string; at: string; text: string };
 
-const tripKey = (uid: string, id: string) => `u/${uid}/trip/${id}`;
 const noteKey = (uid: string, id: string) => `u/${uid}/note/${id}`;
 
 async function listJSON<T>(prefix: string): Promise<T[]> {
@@ -36,19 +28,6 @@ async function listJSON<T>(prefix: string): Promise<T[]> {
   return out;
 }
 const body = async (req: Request) => { try { return await req.json(); } catch { return {}; } };
-/** A credited Wikimedia Commons header for an imported card. Returns undefined when nothing suitable is found. */
-async function autoPhoto(uid: string, query: string, framePerson: boolean): Promise<Trip["photo"] | undefined> {
-  try {
-    const hit = (await searchCommons(query))[0];
-    if (!hit) return undefined;
-    const dl = await downloadCommons(hit.url);
-    const id = newId(12);
-    await putWhole(uid, id, dl.type, dl.data, "header");
-    let focus = 25;
-    if (framePerson && dl.data.byteLength < 4.5 * 1024 * 1024) { const f = await faceFocus(Buffer.from(dl.data), dl.type); if (f !== null) focus = Math.max(0, f - 8); }
-    return { media: id, credit: hit.credit, focus, source: hit.source };
-  } catch (e) { console.error("autoPhoto failed", (e as any)?.message); return undefined; }
-}
 const str = (v: unknown, max = 500) => (typeof v === "string" ? v.trim().slice(0, max) : "");
 
 function publicSettings(p: Profile) {
@@ -58,6 +37,8 @@ function publicSettings(p: Profile) {
     calendar: { connected: !!p.ics },
     ingestKey: p.ingestKey ?? null,
     ai: aiAvailable(),
+    onboarded: !!p.onboarded,
+    cardsSyncedAt: p.cardsSyncedAt ?? null,
   };
 }
 
@@ -188,6 +169,14 @@ export default async (req: Request, context: Context) => {
       catch (e: any) { delete p.ics; await saveProfile(p); return err(e.message); }
     }
     if (a === "settings" && b === "calendar" && m === "DELETE") { delete p.ics; await saveProfile(p); await store().delete(`u/${uid}/cache/calendar`); return json({ settings: publicSettings(p) }); }
+    if (a === "settings" && b === "onboarded" && m === "POST") { p.onboarded = true; await saveProfile(p); return json({ settings: publicSettings(p) }); }
+    if (a === "cards" && b === "sync" && m === "POST") {
+      if (!p.ics) return err("Connect Google Calendar first.");
+      if (!aiAvailable()) return err("Card building needs Claude, which isn't switched on for this site yet.", 503);
+      const r = await syncCards(p);
+      return json({ ...r, settings: publicSettings(p) });
+    }
+    if (a === "cards" && b === "photos" && m === "POST") return json(await fillPhotos(uid, 2));
     if (a === "settings" && b === "ingest-key" && m === "POST") {
       if (p.ingestKey) await store().delete(`ingest/${p.ingestKey}`);
       p.ingestKey = newId(24); await saveProfile(p); await setJSON(`ingest/${p.ingestKey}`, { uid });

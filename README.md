@@ -8,8 +8,9 @@ Live at **https://life.from5to10million.com** once the Netlify setup below is do
 
 - `public/`: the app (plain HTML, CSS and JS with no build step), installable from Safari with **Share → Add to Home Screen**.
 - `netlify/functions/api.mts`: the API at `/api/*`.
-- `netlify/functions/oura-daily.mts`: pulls Oura every morning at 12:00 UTC (5:00 AM Mountain).
-- `netlify/lib/`: storage, login, health logic, calendar, media and photo search.
+- `netlify/functions/daily.mts`: every morning at 12:00 UTC (5:00 AM Mountain): pulls Oura, rebuilds cards from each calendar, fetches missing header photos.
+- `netlify/lib/`: storage, login, health logic, calendar, cards, media and photo search.
+- **Cards build themselves.** Google copies flight, hotel, ticket and reservation emails into Google Calendar as events. `lib/cards.mts` reads the calendar, asks Claude to group the events into trips, concerts and events, creates the cards, and merges new bookings into existing trips (each card remembers its event ids). Runs on calendar connect, on app open after 6 hours, and daily. No personal data is ever committed to this repo.
 - Data lives in Netlify Blobs, with every user under their own `u/<id>/` keys. Health history only grows: each import is merged into its day and recorded in that day's log. Undo is the only way a day reverts.
 
 ## Accounts

@@ -95,8 +95,8 @@ const SAMPLE = (() => {
 
 /* ---------- derived ---------- */
 const realDays = () => S.days.size > 0;
-const daysSrc = () => (realDays() ? S.days : SAMPLE.days);
-const tripsSrc = () => (S.trips.length ? S.trips : SAMPLE.trips);
+const daysSrc = () => S.days;
+const tripsSrc = () => S.trips;
 const SRC = [{ key: "apple", label: "Apple Health" }, { key: "oura", label: "Oura" }, { key: "eight", label: "Eight Sleep" }];
 const sortedDays = (map) => [...map.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
 function series(map, src, field, n = 14) {
@@ -206,7 +206,7 @@ function renderTabs() { $("#tabs").innerHTML = TABS.map(([k, l, p]) => `<button 
 function header(eyebrow, title, right = "") {
   $("#top").innerHTML = `<div style="min-width:0"><div class="eyebrow">${esc(eyebrow)}</div><h1 class="h1">${esc(title)}</h1></div><div style="display:flex;gap:8px;align-items:center">${right}<button class="iconbtn" data-act="settings" aria-label="Settings">${icon(I.gear, 20)}</button></div>`;
 }
-const sampleBanner = (what) => `<div class="banner-sample"><span class="chip sample" style="flex:none">Sample</span><span><b>${what}</b> Your first real import starts your history and this sample disappears. Sample numbers are never saved.</span></div>`;
+const sampleBanner = () => "";
 function render() {
   if (!S.loaded) return;
   renderTabs(); store.set("lifeos.tab", S.tab);
@@ -214,9 +214,9 @@ function render() {
 }
 
 function vToday() {
-  const map = daysSrc(); const isSample = !realDays();
+  const map = daysSrc(); const isSample = false;
   const r = readiness(map); const b = bodyLatest(map); const mv = bestMove(map, r);
-  header(new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" }), "Ready State", isSample ? `<span class="chip sample">Sample</span>` : "");
+  header(new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" }), "Ready State");
   const live = r.per.filter((p) => p.score != null).length;
   const srcs = r.per.map((p) => (p.score != null
     ? `<div class="src on"><div class="num n">${p.score}</div><div class="k">${p.label}</div></div>`
@@ -226,7 +226,6 @@ function vToday() {
     : `<div class="num" style="color:var(--wait);font-size:24px;padding-block:14px 6px">Waiting</div><div class="from">Add a screenshot</div>`}</div>`;
   const nextTrip = tripsSrc().filter((t) => (t.end || t.start) >= todayStr()).sort((a, c) => (a.start < c.start ? -1 : 1))[0];
   $("#view").innerHTML = `
-    ${isSample ? sampleBanner("You're looking at sample data.") : ""}
     <section class="hero" aria-label="Readiness">
       <div class="label">Readiness</div>
       ${r.score != null ? `<div class="num score">${r.score}<span class="of">/100</span></div>` : `<div class="num score waiting">Waiting</div>`}
@@ -306,14 +305,13 @@ function srcCard(map, key, isSample) {
   return `<section class="card srccard"><div class="hd"><h3>${LABEL[key]}</h3>${chip}</div>${html}${err}<div class="actions">${how}</div></section>`;
 }
 function vHealth() {
-  const map = daysSrc(); const isSample = !realDays();
+  const map = daysSrc(); const isSample = false;
   header("Sources", "Health", `<button class="btn volt" data-act="shots" style="height:38px">${icon(I.plus, 18)} Add</button>`);
   const bodyRows = sortedDays(map).filter((d) => d.sources?.body).reverse().slice(0, 20);
   const logs = [];
   if (realDays()) for (const d of S.days.values()) for (const l of d.log || []) logs.push({ ...l, date: d.date });
   logs.sort((a, b) => (a.at < b.at ? 1 : -1));
   $("#view").innerHTML = `
-    ${isSample ? sampleBanner("Sample health data.") : ""}
     <button class="drop" data-act="shots" style="text-align:left"><span class="ic">${icon(I.img)}</span><span><b>Drop or choose screenshots</b><span class="small muted">You can also paste. Each one is read, logged to its day, then confirmed.</span></span></button>
     ${srcCard(map, "oura", isSample)}${srcCard(map, "eight", isSample)}${srcCard(map, "apple", isSample)}${srcCard(map, "body", isSample)}
     ${bodyRows.length ? `<section class="card"><div class="label" style="margin-bottom:10px">Body composition history</div><div class="tblwrap"><table class="hist"><thead><tr><th>Day</th><th>Weight</th><th>Fat %</th><th>Muscle</th><th>Met. age</th></tr></thead><tbody>
@@ -348,20 +346,22 @@ function calSuggestions() {
   return calEvents().filter((e) => re.test(e.title) && !have.has(e.id) && e.e > new Date()).slice(0, 4);
 }
 function vTrips() {
-  const isSample = !S.trips.length; const list = tripsSrc(); const today = todayStr();
+  const isSample = false; const list = tripsSrc(); const today = todayStr();
   header("Trips, concerts & events", "Trips", `<button class="btn volt" data-act="newtrip" style="height:38px">${icon(I.plus, 18)} New</button>`);
+  const cal = S.settings?.calendar?.connected;
+  const synced = S.settings?.cardsSyncedAt ? `Updated ${new Date(S.settings.cardsSyncedAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}` : "";
   const up = list.filter((t) => (t.end || t.start) >= today).sort((a, b) => (a.start < b.start ? -1 : 1));
   const past = list.filter((t) => (t.end || t.start) < today).sort((a, b) => (a.start > b.start ? -1 : 1));
   const show = S.tripSeg === "upcoming" ? up : past; const sugg = calSuggestions();
+  const auto = cal
+    ? `<div class="small muted" style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span>${S.syncing ? spinner("Building cards from your calendar…") : `Built from your calendar.${synced ? " " + esc(synced) + "." : ""}`}</span>${S.syncing ? "" : `<button class="link" data-act="synccards">Refresh</button>`}</div>`
+    : `<section class="card"><div class="label">Automatic cards</div><p style="margin:8px 0 0">Connect Google Calendar and your trips, concerts and events build themselves from the flights, tickets and reservations already on it. Nothing to type in.</p><div class="actions"><button class="btn volt" data-act="settings">Connect Google Calendar</button></div></section>`;
   $("#view").innerHTML = `
-    ${isSample ? sampleBanner("Sample trips.") : ""}
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
-      <div class="seg" role="group" aria-label="Filter"><button data-seg="upcoming" aria-pressed="${S.tripSeg === "upcoming"}">Upcoming ${up.length}</button><button data-seg="past" aria-pressed="${S.tripSeg === "past"}">Past ${past.length}</button></div>
-      <button class="btn ghost" data-act="importcards" style="height:36px">Import cards file</button>
-    </div>
+    ${auto}
+    <div class="seg" role="group" aria-label="Filter"><button data-seg="upcoming" aria-pressed="${S.tripSeg === "upcoming"}">Upcoming ${up.length}</button><button data-seg="past" aria-pressed="${S.tripSeg === "past"}">Past ${past.length}</button></div>
     <div class="progress" id="cardsProg" hidden><i></i></div>
     ${sugg.length && S.tripSeg === "upcoming" ? `<section class="card"><div class="label" style="margin-bottom:6px">From your calendar</div>${sugg.map((e) => `<div class="suggest"><div style="min-width:0"><div style="font-weight:600;overflow-wrap:anywhere">${esc(e.title)}</div><div class="small muted">${esc(e.s.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }))}${e.location ? " · " + esc(e.location) : ""}</div></div><button class="btn ghost" data-mkcard="${esc(e.id)}" style="height:36px;flex:none">Make card</button></div>`).join("")}</section>` : ""}
-    ${show.length ? show.map((t) => tripCard(t, isSample)).join("") : `<div class="empty">No ${S.tripSeg} cards yet.</div>`}`;
+    ${show.length ? show.map((t) => tripCard(t, isSample)).join("") : `<div class="empty">${cal ? `No ${S.tripSeg} cards yet. Anything you add to your calendar shows up here on its own.` : `Nothing here yet.`}</div>`}`;
 }
 
 /* Calendar */
@@ -603,7 +603,7 @@ function guideHtml(g) {
   return `<section class="guide"><div class="label guide-k">${esc(g.kind || "City guide")}</div><h3>${esc(g.title)}</h3><p>${esc(g.body)}</p>${g.linkUrl ? `<a class="link" href="${esc(g.linkUrl)}" target="_blank" rel="noopener">${esc(g.linkLabel || "Open")}</a>` : ""}</section>`;
 }
 function tripDetail(id) {
-  const isSample = !S.trips.length; const t = tripsSrc().find((x) => x.id === id); if (!t) return;
+  const isSample = false; const t = tripsSrc().find((x) => x.id === id); if (!t) return;
   const long = (s) => parseYmd(s).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
   const entries = [...(t.journal || [])].sort((a, b) => (a.at < b.at ? 1 : -1));
   const chips = [...new Set((t.place || "").split(/\s*[·,]\s*/).filter(Boolean))].slice(0, 3);
@@ -700,10 +700,26 @@ function photoPicker(t) {
   });
 }
 
+/* ---------- cards from the calendar ---------- */
+async function syncCards(quiet = false) {
+  if (S.syncing || !S.settings?.calendar?.connected) return;
+  S.syncing = true; if (S.tab === "trips") render();
+  try {
+    const r = await api("cards/sync", { method: "POST", body: {} });
+    S.settings = r.settings;
+    await loadState(); if (S.tab === "trips" || S.tab === "today") render();
+    if (!quiet || r.created) toast(r.created ? `${r.created} new card${r.created === 1 ? "" : "s"} from your calendar.` : r.merged ? "Cards updated from your calendar." : "Your cards are up to date.");
+    for (let i = 0; i < 12; i++) { const ph = await api("cards/photos", { method: "POST", body: {} }); if (ph.done) { await loadState(); if (S.tab === "trips" || S.tab === "today") render(); } if (!ph.remaining || !ph.done) break; }
+  } catch (e) { if (!quiet) toast(esc(e.message)); }
+  S.syncing = false; if (S.tab === "trips") render();
+}
+
 /* ---------- settings ---------- */
-function settingsSheet() {
+function settingsSheet(onboarding = false) {
   const st = S.settings; const ingestUrl = `${location.origin}/api/ingest/apple`;
-  sheet(`<h2>Connections</h2><p class="muted small">Signed in as ${esc(st.email)}</p>
+  sheet(`${onboarding
+    ? `<h2>Set up LifeOS</h2><p class="muted">Three connections, all optional, each about a minute. You can come back to any of them from the gear icon.</p>`
+    : `<h2>Connections</h2><p class="muted small">Signed in as ${esc(st.email)}</p>`}
     <div class="conn"><div><h4>Oura</h4><div class="small muted">${st.oura.connected ? `Connected${st.oura.lastSync ? ` · synced ${esc(new Date(st.oura.lastSync).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }))}` : ""}. Syncs every morning.` : "Daily sync of readiness, sleep, HRV and resting heart rate."}</div></div><span class="chip ${st.oura.connected ? "ok" : "wait"}">${st.oura.connected ? "On" : "Off"}</span></div>
     ${st.oura.connected ? `<div class="actions"><button class="btn" data-act="ourasync">Sync now</button><button class="btn ghost" id="ouraOff">Disconnect</button></div>` : `
       <div class="field"><label class="label" for="ouraTok">Personal access token</label><input id="ouraTok" type="password" autocomplete="off" placeholder="Paste from cloud.ouraring.com"></div>
@@ -711,7 +727,7 @@ function settingsSheet() {
       <div class="actions"><button class="btn volt" id="ouraOn">Connect Oura</button></div>`}
     <div class="conn"><div><h4>Google Calendar</h4><div class="small muted">${st.calendar.connected ? "Connected. Refreshes every 5 minutes." : "Uses your calendar's private iCal address."}</div></div><span class="chip ${st.calendar.connected ? "ok" : "wait"}">${st.calendar.connected ? "On" : "Off"}</span></div>
     ${st.calendar.connected ? `<div class="actions"><button class="btn ghost" id="calOff">Disconnect</button></div>` : `
-      <div class="small muted">Google Calendar on a computer → Settings → your calendar → Integrate calendar → copy <b>Secret address in iCal format</b>.</div>
+      <div class="small">Your trips, concerts and events build themselves from this. On a computer, open <a class="link" href="https://calendar.google.com/calendar/r/settings" target="_blank" rel="noopener">Google Calendar settings</a>, pick your calendar on the left, scroll to <b>Integrate calendar</b>, and copy <b>Secret address in iCal format</b>.</div>
       <div class="field"><label class="label" for="icsUrl">Secret iCal address</label><input id="icsUrl" type="url" autocomplete="off" placeholder="https://calendar.google.com/calendar/ical/…/basic.ics"></div>
       <div class="actions"><button class="btn volt" id="calOn">Connect calendar</button></div>`}
     <div class="conn"><div><h4>Apple Health</h4><div class="small muted">A Shortcut automation sends each day's numbers here.</div></div><span class="chip ${latestFor(S.days, "apple") ? "ok" : "wait"}">${latestFor(S.days, "apple") ? "On" : "Off"}</span></div>
@@ -724,8 +740,10 @@ function settingsSheet() {
     <div class="conn"><div><h4>Eight Sleep</h4><div class="small muted">Eight Sleep has no public API. Drop screenshots and LifeOS logs score, HRV, deep sleep and bio age.</div></div></div>
     <div class="conn"><div><h4>Appearance</h4><div class="small muted">Follow your phone, or pick one.</div></div></div>
     <div class="seg" role="group" aria-label="Appearance">${["system", "light", "dark"].map((v) => `<button data-theme-set="${v}" aria-pressed="${(store.get("lifeos.theme") || "system") === v}">${v[0].toUpperCase() + v.slice(1)}</button>`).join("")}</div>
+    <div class="conn"><div><h4>Advanced</h4><div class="small muted">Load cards from a LifeOS cards file.</div></div><button class="btn ghost" data-act="importcards" style="height:36px">Import file</button></div>
     <div class="err" id="sErr"></div>
-    <div class="actions" style="margin-top:22px"><button class="btn ghost wide" id="signOut">Sign out</button></div>`, (el) => {
+    <div class="actions" style="margin-top:22px">${onboarding ? `<button class="btn volt wide" id="onboardDone">Done, take me in</button>` : `<button class="btn ghost wide" id="signOut">Sign out</button>`}</div>`, (el) => {
+    el.querySelector("#onboardDone")?.addEventListener("click", async () => { closeSheet(); try { const r = await api("settings/onboarded", { method: "POST", body: {} }); S.settings = r.settings; } catch {} });
     el.querySelectorAll("[data-theme-set]").forEach((b) => (b.onclick = () => { store.set("lifeos.theme", b.dataset.themeSet); applyTheme(); el.querySelectorAll("[data-theme-set]").forEach((x) => x.setAttribute("aria-pressed", x === b)); }));
     const err = (e) => (el.querySelector("#sErr").textContent = e.message);
     const busy = (b, t) => { b.disabled = true; b.innerHTML = `<span class="spin"></span> ${t}`; };
@@ -737,7 +755,7 @@ function settingsSheet() {
     el.querySelector("#ouraOff")?.addEventListener("click", async () => { try { const r = await api("settings/oura", { method: "DELETE", body: {} }); S.settings = r.settings; settingsSheet(); render(); toast("Oura disconnected. Your history stays."); } catch (x) { err(x); } });
     el.querySelector("#calOn")?.addEventListener("click", async (e) => {
       const btn = e.currentTarget; busy(btn, "Connecting");
-      try { const r = await api("settings/calendar", { method: "POST", body: { url: el.querySelector("#icsUrl").value } }); S.settings = r.settings; S.cal.connected = true; settingsSheet(); await loadCalendar(true); toast(`Calendar connected. ${r.count} events found.`); }
+      try { const r = await api("settings/calendar", { method: "POST", body: { url: el.querySelector("#icsUrl").value } }); S.settings = r.settings; S.cal.connected = true; settingsSheet(onboarding); loadCalendar(true); toast(`Calendar connected. Building your cards…`); syncCards(); }
       catch (x) { err(x); btn.disabled = false; btn.textContent = "Connect calendar"; }
     });
     el.querySelector("#calOff")?.addEventListener("click", async () => { try { const r = await api("settings/calendar", { method: "DELETE", body: {} }); S.settings = r.settings; S.cal = { status: "idle", events: [], fetchedAt: null, error: null, connected: false }; settingsSheet(); render(); } catch (x) { err(x); } });
@@ -746,7 +764,7 @@ function settingsSheet() {
       const b = e.currentTarget; if (!b.dataset.armed) { b.dataset.armed = "1"; b.textContent = "Tap again: old key stops working"; return; }
       try { const r = await api("settings/ingest-key", { method: "POST", body: {} }); S.settings = r.settings; settingsSheet(); toast("New key made. Update your Shortcut."); } catch (x) { err(x); }
     };
-    el.querySelector("#signOut").onclick = async () => { await api("auth/logout", { method: "POST", body: {} }).catch(() => {}); closeSheet(); location.reload(); };
+    el.querySelector("#signOut")?.addEventListener("click", async () => { await api("auth/logout", { method: "POST", body: {} }).catch(() => {}); closeSheet(); location.reload(); });
   });
 }
 
@@ -771,6 +789,7 @@ document.addEventListener("click", async (e) => {
   else if (act === "settings") settingsSheet();
   else if (act === "newtrip") tripForm();
   else if (act === "importcards") $("#fileCards").click();
+  else if (act === "synccards") syncCards();
   else if (act === "ourasync") {
     a.disabled = true; toast(spinner("Syncing Oura…"));
     try { const r = await api("sync/oura", { method: "POST", body: {} }); S.settings = r.settings; await loadState(); render(); if ($("#scrim")) settingsSheet(); toast(`Oura synced. ${r.sync.days} day${r.sync.days === 1 ? "" : "s"} updated.`); }
@@ -831,6 +850,10 @@ async function boot() {
   render();
   loadCalendar();
   clearInterval(calTimer); calTimer = setInterval(() => { if (document.visibilityState === "visible") loadCalendar(); }, 5 * 60_000);
+  if (!S.settings.onboarded) settingsSheet(true);
+  // Rebuild cards from the calendar if it hasn't happened in the last 6 hours.
+  const cs = S.settings.cardsSyncedAt;
+  if (S.settings.calendar?.connected && (!cs || Date.now() - Date.parse(cs) > 6 * 3600e3)) syncCards(true);
   // Pull Oura if the morning sync hasn't run in the last 3 hours.
   const ls = S.settings.oura?.lastSync;
   if (S.settings.oura?.connected && (!ls || Date.now() - Date.parse(ls) > 3 * 3600e3)) api("sync/oura", { method: "POST", body: {} }).then(async () => { await loadState(); render(); }).catch(() => {});
